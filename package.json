@@ -1,5 +1,5 @@
 {
-  "name": "byteutils",
+  "name": "@chickenjdk/byteutils",
   "version": "1.0.0",
   "description": "Some utilitys for working with binary data",
   "main": "dist/index.js",
