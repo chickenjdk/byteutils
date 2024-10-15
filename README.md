@@ -1,2 +1,2 @@
 # byteutils
-Some basic tools for working with binary data.
+Some basic tools for working with big endian binary data.
