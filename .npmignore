@@ -1,3 +1,4 @@
 src/
 .gitignore
 TODO.md
+tsconfig.json
