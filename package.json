@@ -1,6 +1,6 @@
 {
   "name": "@chickenjdk/byteutils",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Some utilitys for working with binary data",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

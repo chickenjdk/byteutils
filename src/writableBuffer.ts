@@ -7,6 +7,24 @@ import {
   uint8Float64ArrayView,
 } from "./common";
 import { uint8ArrayLike } from "./types";
+function swapEndiannessWritableBuffer<
+  T extends new (...args: any[]) => {
+    write(value: uint8ArrayLike): void;
+    writeUint8Array(value: uint8ArrayLike): void;
+    writeBackwards(value: uint8ArrayLike): void;
+    isLe: boolean;
+  }
+>(wb: T): T{
+  return class extends wb {
+    constructor(...args: any[]) {
+      super(...args);
+      this.writeBackwards = super.write.bind(this);
+      this.write = super.writeBackwards.bind(this);
+      this.writeUint8Array = super.writeBackwards.bind(this);
+      this.isLe = !this.isLe;
+    }
+  };
+}
 const constants = {
   // 11111111111111111111111111111111 (32 bits of 1s, 4 bytes of 1s, 8 nibbles of 1s)
   allOnes: 0xffffffff,
@@ -20,6 +38,7 @@ export abstract class writableBufferBase {
   abstract write(value: uint8ArrayLike): void;
   abstract writeBackwards(value: uint8ArrayLike): void;
   abstract push(value: number): void;
+  isLe: boolean = false;
   /**
    * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
    */
@@ -34,7 +53,7 @@ export abstract class writableBufferBase {
     bytes ||= Math.ceil((32 - Math.clz32(value)) / 8);
     const bits = bytes * 8;
     while ((i += 8) < bits) {
-      out.unshift(((mask & value) >>> i));
+      out.unshift((mask & value) >>> i);
       mask <<= 8;
     }
     this.write(out);
@@ -67,7 +86,7 @@ export abstract class writableBufferBase {
     );
   }
   writeTwosComplementByte(value: number): void {
-    this.push(((value & 0b11111111) >>> 0));
+    this.push((value & 0b11111111) >>> 0);
   }
   writeTwosComplementByteArray(values: number[]): void {
     values.forEach(this.writeTwosComplementByte.bind(this));
@@ -134,9 +153,7 @@ export abstract class writableBufferBase {
     );
   }
   writeSignedOnesComplementByte(value: number): void {
-    this.push(
-      value < 0 ? (((value - 1) & 0xff)) : (value)
-    );
+    this.push(value < 0 ? (value - 1) & 0xff : value);
   }
   writeSignedOnesComplementByteArray(values: number[]): void {
     values.forEach(this.writeSignedOnesComplementByte.bind(this));
@@ -165,7 +182,7 @@ export abstract class writableBufferBase {
     );
   }
   writeSignedIntegerByte(value: number): void {
-    this.push((value < 0 ? 0b10000000 | -value : value));
+    this.push(value < 0 ? 0b10000000 | -value : value);
   }
   writeSignedIntegerByteArray(values: number[]): void {
     values.forEach(this.writeSignedIntegerByte.bind(this));
@@ -191,15 +208,14 @@ export class writableBufferResize
   set buffer(newValue: uint8ArrayLike | writableBufferStorage) {
     if (newValue instanceof writableBufferResize) {
       this.#buffer = newValue.#buffer;
-    } else if (newValue instanceof writableBufferBase) {
-      const buffer = newValue.buffer;
+    } else {
+      const buffer =
+        newValue instanceof writableBufferBase ? newValue.buffer : newValue;
       // @ts-ignore
       this.#buffer.buffer.resize(buffer.length);
       for (let index = 0; index < buffer.length; index++) {
         this.#buffer[index] = buffer[index];
       }
-    } else {
-      this.writeUint8Array(newValue);
     }
   }
   get length() {
@@ -240,6 +256,8 @@ export class writableBufferResize
     this.write(Array.prototype.slice.call(value.buffer, 0));
   }
 }
+export const writableBufferResizeLE =
+  swapEndiannessWritableBuffer(writableBufferResize);
 export class writableBufferChunkArray
   extends writableBufferBase
   implements writableBufferStorage
@@ -254,7 +272,7 @@ export class writableBufferChunkArray
         (this.#buffers.length - 1 - index) * this.#chunkSize
       );
       return joined;
-    }, new Uint8Array(this.length)) as Uint8Array;
+    }, new Uint8Array(this.length));
   }
   set buffer(value: uint8ArrayLike | writableBufferStorage) {
     if (
@@ -263,14 +281,12 @@ export class writableBufferChunkArray
     ) {
       this.#buffers = value.#buffers;
       this.#used = value.#used;
-    } else if (value instanceof writableBufferBase) {
-      this.#buffers = [new Uint8Array(this.#chunkSize)];
-      this.#used = 0;
-      this.write(value.buffer as Uint8Array);
     } else {
       this.#buffers = [new Uint8Array(this.#chunkSize)];
       this.#used = 0;
-      this.writeUint8Array(value);
+      (this.isLe ? this.writeBackwards : this.write)(
+        value instanceof writableBufferBase ? value.buffer : value
+      );
     }
   }
   get length() {
@@ -301,4 +317,8 @@ export class writableBufferChunkArray
     }
   }
 }
+export const writableBufferChunkArrayLE = swapEndiannessWritableBuffer(
+  writableBufferChunkArray
+);
 export const writableBuffer = writableBufferChunkArray;
+export const writableBufferLE = writableBufferChunkArrayLE;
