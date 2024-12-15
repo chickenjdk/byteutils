@@ -24,17 +24,17 @@ export abstract class writableBufferBase {
    * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
    */
   writeUint8Array = this.write;
-  writeWriteableBuffer(value: writableBuffer): void {
+  writeWriteableBuffer(value: writableBufferStorage): void {
     this.write(Array.prototype.slice.call(value.buffer, 0));
   }
   writeUnsignedInt(value: number, bytes?: number): void {
     let mask = 0b11111111;
-    let out:oneByteMax[] = [];
+    let out: oneByteMax[] = [];
     let i = -8;
     bytes ||= Math.ceil((32 - Math.clz32(value)) / 8);
     const bits = bytes * 8;
     while ((i += 8) < bits) {
-      out.unshift((mask & value) >>> i as oneByteMax);
+      out.unshift(((mask & value) >>> i) as oneByteMax);
       mask <<= 8;
     }
     this.write(out);
@@ -172,7 +172,15 @@ export abstract class writableBufferBase {
     values.forEach(this.writeSignedIntegerByte.bind(this));
   }
 }
-export class writableBuffer extends writableBufferBase {
+export declare abstract class writableBufferStorage extends writableBufferBase {
+  abstract get buffer(): Uint8Array;
+  abstract set buffer(newValue: uint8ArrayLike | writableBufferStorage);
+  abstract get length(): number;
+}
+export class writableBufferResize
+  extends writableBufferBase
+  implements writableBufferStorage
+{
   #buffer: Uint8Array;
   get buffer(): Uint8Array {
     return this.#buffer.slice(0);
@@ -181,20 +189,22 @@ export class writableBuffer extends writableBufferBase {
    * Change the buffer of exsisting data.
    * If a Uint8Array (or buffer) is pased, and it is not resizeable, it copys the bytes of the buffer
    */
-  set buffer(newValue: Uint8Array | Buffer | writableBuffer) {
-    const buffer =
-      newValue instanceof writableBuffer ? newValue.#buffer : newValue;
-    // @ts-ignore
-    if (buffer.buffer.resizable) {
-      this.#buffer = buffer;
-    } else {
-      // Copy the buffers bytes
+  set buffer(newValue: uint8ArrayLike | writableBufferStorage) {
+    if (newValue instanceof writableBufferResize) {
+      this.#buffer = newValue.#buffer;
+    } else if (newValue instanceof writableBufferBase) {
+      const buffer = newValue.buffer;
       // @ts-ignore
       this.#buffer.buffer.resize(buffer.length);
-      buffer.forEach((value, index) => {
-        this.#buffer[index] = value;
-      });
+      for (let index = 0; index < buffer.length; index++) {
+        this.#buffer[index] = buffer[index];
+      }
+    } else {
+      this.writeUint8Array(newValue);
     }
+  }
+  get length() {
+    return this.#buffer.length;
   }
   constructor(maxLength?: number) {
     super();
@@ -227,4 +237,69 @@ export class writableBuffer extends writableBufferBase {
       this.#buffer[bufferLength - i] = value[i];
     }
   }
+  writeWriteableBuffer(value: writableBufferResize): void {
+    this.write(Array.prototype.slice.call(value.buffer, 0));
+  }
 }
+export class writableBufferChunkArray
+  extends writableBufferBase
+  implements writableBufferStorage
+{
+  #chunkSize: number;
+  #buffers: Uint8Array[];
+  #used: number = 0;
+  get buffer(): Uint8Array {
+    return this.#buffers.reduce((joined, newBuff, index) => {
+      joined.set(
+        index === 0 ? newBuff.slice(0, this.#used) : newBuff,
+        (this.#buffers.length - 1 - index) * this.#chunkSize
+      );
+      return joined;
+    }, new Uint8Array(this.length)) as Uint8Array;
+  }
+  set buffer(value: uint8ArrayLike | writableBufferStorage) {
+    if (
+      value instanceof writableBufferChunkArray &&
+      value.#chunkSize === this.#chunkSize
+    ) {
+      this.#buffers = value.#buffers;
+      this.#used = value.#used;
+    } else if (value instanceof writableBufferBase) {
+      this.#buffers = [new Uint8Array(this.#chunkSize)];
+      this.#used = 0;
+      this.write(value.buffer as Uint8Array);
+    } else {
+      this.#buffers = [new Uint8Array(this.#chunkSize)];
+      this.#used = 0;
+      this.writeUint8Array(value);
+    }
+  }
+  get length() {
+    return (
+      this.#chunkSize * this.#buffers.length - (this.#chunkSize - this.#used)
+    );
+  }
+  constructor(chunkSize: number = 2000) {
+    super();
+    this.#chunkSize = chunkSize;
+    this.#buffers = [new Uint8Array(chunkSize)];
+  }
+  push(value: number) {
+    if (this.#used === this.#chunkSize) {
+      this.#used = 0;
+      this.#buffers.unshift(new Uint8Array(this.#chunkSize));
+    }
+    this.#buffers[0][this.#used++] = value;
+  }
+  write(value: uint8ArrayLike) {
+    for (let index = 0; index < value.length; index++) {
+      this.push(value[index]);
+    }
+  }
+  writeBackwards(value: uint8ArrayLike) {
+    for (let index = value.length - 1; index >= 0; index--) {
+      this.push(value[index]);
+    }
+  }
+}
+export const writableBuffer = writableBufferChunkArray;
