@@ -6,7 +6,7 @@ import {
   uint8Float32ArrayView,
   uint8Float64ArrayView,
 } from "./common";
-import { oneByteMax, uint8ArrayLike } from "./types";
+import { uint8ArrayLike } from "./types";
 const constants = {
   // 11111111111111111111111111111111 (32 bits of 1s, 4 bytes of 1s, 8 nibbles of 1s)
   allOnes: 0xffffffff,
@@ -19,7 +19,7 @@ export abstract class writableBufferBase {
   // Methods to implement
   abstract write(value: uint8ArrayLike): void;
   abstract writeBackwards(value: uint8ArrayLike): void;
-  abstract push(value: oneByteMax): void;
+  abstract push(value: number): void;
   /**
    * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
    */
@@ -29,12 +29,12 @@ export abstract class writableBufferBase {
   }
   writeUnsignedInt(value: number, bytes?: number): void {
     let mask = 0b11111111;
-    let out: oneByteMax[] = [];
+    let out: number[] = [];
     let i = -8;
     bytes ||= Math.ceil((32 - Math.clz32(value)) / 8);
     const bits = bytes * 8;
     while ((i += 8) < bits) {
-      out.unshift(((mask & value) >>> i) as oneByteMax);
+      out.unshift(((mask & value) >>> i));
       mask <<= 8;
     }
     this.write(out);
@@ -48,7 +48,7 @@ export abstract class writableBufferBase {
       out.unshift(Number((mask & value) >> i));
       mask <<= 8n;
     }
-    this.write(out as oneByteMax[]);
+    this.write(out);
   }
   writeTwosComplement(value: number, bytes?: number): void {
     const bitsLength = 32 - Math.clz32(Math.abs(value));
@@ -67,7 +67,7 @@ export abstract class writableBufferBase {
     );
   }
   writeTwosComplementByte(value: number): void {
-    this.push(((value & 0b11111111) >>> 0) as oneByteMax);
+    this.push(((value & 0b11111111) >>> 0));
   }
   writeTwosComplementByteArray(values: number[]): void {
     values.forEach(this.writeTwosComplementByte.bind(this));
@@ -78,18 +78,17 @@ export abstract class writableBufferBase {
     // I don't know mutch endian jargon ( yet ) so please forgive my lack of jargon.
     if (isBigEndian) {
       // Come ON typescript ( Wait, it is DT's fault. They wrote the defs, not typescript.
-      this.write(uint8Float32ArrayView as uint8ArrayLike);
+      this.write(uint8Float32ArrayView);
     } else {
-      this.writeBackwards(uint8Float32ArrayView as uint8ArrayLike);
+      this.writeBackwards(uint8Float32ArrayView);
     }
   }
   writeDouble(value: number): void {
     float64Array[0] = value;
     if (isBigEndian) {
-      // Come ON typescript ( Wait, it is DT's fault. They wrote the defs, not typescript.
-      this.write(uint8Float64ArrayView as uint8ArrayLike);
+      this.write(uint8Float64ArrayView);
     } else {
-      this.writeBackwards(uint8Float64ArrayView as uint8ArrayLike);
+      this.writeBackwards(uint8Float64ArrayView);
     }
   }
   writeString<returnLength extends boolean = false>(
@@ -101,17 +100,17 @@ export abstract class writableBufferBase {
     if (returnLength) {
       let encoded: uint8ArrayLike;
       if (mutf8 === true) {
-        encoded = encodeMutf8(value) as uint8ArrayLike;
+        encoded = encodeMutf8(value);
       } else {
-        encoded = encodeUtf8(value) as uint8ArrayLike;
+        encoded = encodeUtf8(value);
       }
       (cb[0] as (length: number) => void)(encoded.length);
       this.write(encoded);
     } else {
       if (mutf8 === true) {
-        this.write(encodeMutf8(value) as uint8ArrayLike);
+        this.write(encodeMutf8(value));
       } else {
-        this.write(encodeUtf8(value) as uint8ArrayLike);
+        this.write(encodeUtf8(value));
       }
     }
   }
@@ -136,7 +135,7 @@ export abstract class writableBufferBase {
   }
   writeSignedOnesComplementByte(value: number): void {
     this.push(
-      value < 0 ? (((value - 1) & 0xff) as oneByteMax) : (value as oneByteMax)
+      value < 0 ? (((value - 1) & 0xff)) : (value)
     );
   }
   writeSignedOnesComplementByteArray(values: number[]): void {
@@ -166,7 +165,7 @@ export abstract class writableBufferBase {
     );
   }
   writeSignedIntegerByte(value: number): void {
-    this.push((value < 0 ? 0b10000000 | -value : value) as oneByteMax);
+    this.push((value < 0 ? 0b10000000 | -value : value));
   }
   writeSignedIntegerByteArray(values: number[]): void {
     values.forEach(this.writeSignedIntegerByte.bind(this));
@@ -219,7 +218,7 @@ export class writableBufferResize
     // @ts-ignore
     this.#buffer.buffer.resize(this.#buffer.buffer.byteLength + bytes);
   }
-  push(value: oneByteMax): void {
+  push(value: number): void {
     this.#resize(1);
     this.#buffer[this.#buffer.length - 1] = value;
   }

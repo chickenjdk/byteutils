@@ -6,8 +6,6 @@ export type addOneIncrement<value extends number[]> = [...value, value["length"]
 export type rangeArray<from extends number, to extends number> = addOneIncrement<
     createIncrementingArrayOfLength<to>
 > extends [...createIncrementingArrayOfLength<from>, ...infer value] ? value : never;
-export type range<from extends number, to extends number> = rangeArray<from,to>[number];
-export type oneByteMax = range<0, 255>;
 export type uint8ArrayLike = Pick<number[],number|"length">;
 export type asyncify<value extends any> = {[key in keyof value]:value[key] extends (...args: any) => Promise<any> ? value[key] : value[key] extends (...args: any) => any ? (...args: Parameters<value[key]>) => Promise<ReturnType<value[key]>> : value[key]};
 export type IsAUnionAtTopLevel<T, U = T> = U extends any ? [T] extends [U[any]] ? true : false : false;
