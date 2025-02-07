@@ -94,9 +94,7 @@ export abstract class writableBufferBase {
   writeFloat(value: number): void {
     float32Array[0] = value;
     // Typed arrays are endian-dependent, so if the computer is little-endian, the output will be in little-endian format
-    // I don't know mutch endian jargon ( yet ) so please forgive my lack of jargon.
     if (isBigEndian) {
-      // Come ON typescript ( Wait, it is DT's fault. They wrote the defs, not typescript.
       this.write(uint8Float32ArrayView);
     } else {
       this.writeBackwards(uint8Float32ArrayView);
