@@ -26,7 +26,7 @@ function swapEndiannessWritableBuffer<
   };
 }
 const constants = {
-  // 11111111111111111111111111111111 (32 bits of 1s, 4 bytes of 1s, 8 nibbles of 1s)
+  // 11111111111111111111111111111111
   allOnes: 0xffffffff,
   // 10000000000000000000000000000000
   oneThen31Zeros: 0x80000000,
@@ -67,8 +67,9 @@ export abstract class writableBufferBase {
    * Write an unsigned integer to the buffer
    * @param value The unsigned int to write
    * @param bytes How many bytes the unsined int is (If not provided, it will write the minimum length)
+   * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeUnsignedInt(value: number, bytes?: number): void {
+  writeUnsignedInt(value: number, bytes?: number): number {
     let mask = 0b11111111;
     let out: number[] = [];
     let i = -8;
@@ -79,13 +80,15 @@ export abstract class writableBufferBase {
       mask <<= 8;
     }
     this.write(out);
+    return bytes;
   }
   /**
    * Write an unsigned integer to the buffer
    * @param value The unsigned int to write (a bigint)
    * @param bytes How many bytes the unsined int is (If not provided, it will write the minimum length)
+   * @returns How many bytes were written (Same as bytes parameter)
    */
-  writeUnsignedIntBigint(value: bigint, bytes: number): void {
+  writeUnsignedIntBigint(value: bigint, bytes: number): number {
     let mask = 0b11111111n;
     let out: number[] = [];
     let i = -8n;
@@ -95,13 +98,15 @@ export abstract class writableBufferBase {
       mask <<= 8n;
     }
     this.write(out);
+    return bytes;
   }
   /**
    * Write a twos complement to the buffer
    * @param value The number to encode
    * @param bytes How long the twos complement to be written is in bytes
+   * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeTwosComplement(value: number, bytes?: number): void {
+  writeTwosComplement(value: number, bytes?: number): number {
     const bitsLength = 32 - Math.clz32(Math.abs(value));
     bytes ||= Math.ceil((bitsLength + 1) / 8);
     this.writeUnsignedInt(
@@ -110,17 +115,20 @@ export abstract class writableBufferBase {
         : value,
       bytes
     );
+    return bytes;
   }
   /**
    * Write a twos complement to the buffer (From a bigint)
    * @param value The number to encode
    * @param bytes How long the twos complement to be written is in bytes
+   * @returns How many bytes were written (Same as bytes parameter)
    */
-  writeTwosComplementBigint(value: bigint, bytes: number) {
+  writeTwosComplementBigint(value: bigint, bytes: number): number {
     this.writeUnsignedIntBigint(
       value < 0n ? ~(-1n << BigInt(bytes * 8)) & value : value,
       bytes
     );
+    return bytes;
   }
   /**
    * Write a twos complement to the buffer (one byte)
@@ -164,39 +172,26 @@ export abstract class writableBufferBase {
   /**
    * Write a string to the buffer
    * @param value
-   * @param mutf8 If true, write in javas mutf8 format instead
-   * @param returnLength If true, use the cb param (TODO: JUST PLAN OLD CHECK IF THE CB PARAM EXSISTS OR JUST PLAIN RETURN THE LENGTH)
-   * @param cb The callback for the length of the resulting string
+   * @param mutf8 If true, write in java's mutf8 format instead
+   * @returns How many bytes were written
    */
-  writeString<returnLength extends boolean = false>(
-    value: string,
-    mutf8: boolean = false,
-    returnLength?: returnLength,
-    ...cb: returnLength extends true ? [(length: number) => void] : []
-  ): void {
-    if (returnLength) {
-      let encoded: uint8ArrayLike;
-      if (mutf8 === true) {
-        encoded = encodeMutf8(value);
-      } else {
-        encoded = encodeUtf8(value);
-      }
-      (cb[0] as (length: number) => void)(encoded.length);
-      this.write(encoded);
+  writeString(value: string, mutf8: boolean = false): number {
+    let encoded: uint8ArrayLike;
+    if (mutf8 === true) {
+      encoded = encodeMutf8(value);
     } else {
-      if (mutf8 === true) {
-        this.write(encodeMutf8(value));
-      } else {
-        this.write(encodeUtf8(value));
-      }
+      encoded = encodeUtf8(value);
     }
+    this.write(encoded);
+    return encoded.length;
   }
   /**
-   * Encode and write a signed ones complement
+   * Encode and write a signed one's complement
    * @param value The number to encode
    * @param bytes How many bytes to make the encoded value
+   * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeSignedOnesComplement(value: number, bytes?: number) {
+  writeSignedOnesComplement(value: number, bytes?: number): number {
     bytes ||= Math.ceil((33 - Math.clz32(Math.abs(value))) / 8);
     this.writeUnsignedInt(
       value < 0
@@ -205,13 +200,15 @@ export abstract class writableBufferBase {
           value /* & (constants.allOnes >>> (32 - bytes * 8))*/,
       bytes
     );
+    return bytes;
   }
   /**
    * Encode and write a signed ones complement (from a bigint)
    * @param value The number to encode
    * @param bytes How many bytes to make the encoded value
+   * @returns How many bytes were written (Same as bytes parameter)
    */
-  writeSignedOnesComplementBigint(value: bigint, bytes: number) {
+  writeSignedOnesComplementBigint(value: bigint, bytes: number): number {
     this.writeUnsignedIntBigint(
       value < 0n
         ? (value - 1n) & ~(-1n << BigInt(32 - bytes * 8))
@@ -219,6 +216,7 @@ export abstract class writableBufferBase {
           value /* & (constants.allOnes >>> (32 - bytes * 8))*/,
       bytes
     );
+    return bytes;
   }
   /**
    * Encode and write a signed ones complement (one byte)
@@ -237,9 +235,10 @@ export abstract class writableBufferBase {
   /**
    * Encode and write a signed integer
    * @param value The number to encode
-   * @param bytes
+   * @param bytes How many bytes to make the encoded value
+   * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeSignedInteger(value: number, bytes?: number): void {
+  writeSignedInteger(value: number, bytes?: number): number {
     const absValue = Math.abs(value);
     bytes ||= Math.ceil((33 - Math.clz32(absValue)) / 8);
     const bits = bytes * 8;
@@ -250,13 +249,15 @@ export abstract class writableBufferBase {
         : value,
       bytes
     );
+    return bytes;
   }
   /**
    * Encode and write a signed integer (from a bigint)
    * @param value The number to encode
-   * @param bytes
+   * @param bytes How many bytes to make the encoded value
+   * @returns How many bytes were written (Same as bytes parameter)
    */
-  writeSignedIntegerBigint(value: bigint, bytes: number): void {
+  writeSignedIntegerBigint(value: bigint, bytes: number): number {
     // const oneLiner = (value,bytes) =>  value < 0n ? -value | (1n << (BigInt(bytes*8) - 1n)) : value;
     const bits = BigInt(bytes * 8);
     this.writeUnsignedIntBigint(
@@ -266,6 +267,7 @@ export abstract class writableBufferBase {
         : value,
       bytes
     );
+    return bytes;
   }
   /**
    * Encode and write a signed integer (one byte)
