@@ -205,6 +205,17 @@ export abstract class readableBufferBase {
     return sign === 0 ? value ^ sign : -(value ^ sign);
   }
   /**
+   * Parse a signed integer as a bigint
+   * @param bytes How many bytes long the signed integer is
+   * @returns The parsed signed integer (as a bigint)
+   */
+  readSignedIntegerBigint(bytes: number): bigint {
+    const bits = BigInt(bytes * 8);
+    const value = this.readUnsignedIntBigint(bytes);
+    const sign = value & (1n << (bits - 1n));
+    return sign === 0n ? value ^ sign : -(value ^ sign);
+  }
+  /**
    * Parse a signed integer from a byte
    * @returns The parsed signed integer
    */
@@ -329,6 +340,12 @@ export abstract class readableBufferBaseAsync
     const value = await this.readUnsignedInt(bytes);
     const sign = value & (1 << (bits - 1));
     return sign === 0 ? value ^ sign : -(value ^ sign);
+  }
+  async readSignedIntegerBigint(bytes: number): Promise<bigint> {
+    const bits = BigInt(bytes * 8);
+    const value = await this.readUnsignedIntBigint(bytes);
+    const sign = value & (1n << (bits - 1n));
+    return sign === 0n ? value ^ sign : -(value ^ sign);
   }
   async readSignedIntegerByte(): Promise<number> {
     const byte = await this.shift();
