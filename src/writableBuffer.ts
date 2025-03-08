@@ -1,5 +1,6 @@
 import { encodeMutf8, encodeUtf8 } from "./utf8tools";
 import {
+  addDefaultEndianness,
   float32Array,
   float64Array,
   isBigEndian,
@@ -7,24 +8,6 @@ import {
   uint8Float64ArrayView,
 } from "./common";
 import { uint8ArrayLike } from "./types";
-function swapEndiannessWritableBuffer<
-  T extends new (...args: any[]) => {
-    write(value: uint8ArrayLike): void;
-    writeUint8Array(value: uint8ArrayLike): void;
-    writeBackwards(value: uint8ArrayLike): void;
-    isLe: boolean;
-  }
->(wb: T): T {
-  return class extends wb {
-    constructor(...args: any[]) {
-      super(...args);
-      this.writeBackwards = super.write.bind(this);
-      this.write = super.writeBackwards.bind(this);
-      this.writeUint8Array = super.writeBackwards.bind(this);
-      this.isLe = !this.isLe;
-    }
-  };
-}
 const constants = {
   // 11111111111111111111111111111111
   allOnes: 0xffffffff,
@@ -36,24 +19,21 @@ const constants = {
 export abstract class writableBufferBase {
   // Methods to implement
   /**
-   * Write data to the buffer
+   * Write data to the buffer (first byte first written to the end[BE])
    * @param value The data to write
    */
   abstract write(value: uint8ArrayLike): void;
   /**
-   * Write data to the buffer backwards
+   * Write data to the buffer backwards (last byte first written to the end[LE])
    */
   abstract writeBackwards(value: uint8ArrayLike): void;
   /**
-   * Push a byte to the buffer
+   * Push a byte to the buffer's end
    * @param value the byte to push
    */
   abstract push(value: number): void;
   /**
-   * If the buffer is little endian (THINGS BREAK IF YOU CHANGE THIS)
-   */
-  isLe: boolean = false;
-  /**
+   * Write a Uint8Array to the buffer (first byte first written to the end[BE])
    * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
    */
   writeUint8Array = this.write;
@@ -63,6 +43,44 @@ export abstract class writableBufferBase {
   writeWriteableBuffer(value: writableBufferStorage): void {
     this.write(Array.prototype.slice.call(value.buffer, 0));
   }
+  // Little-endian support: <-
+  /**
+   * Write data to the buffer (endian-dependent)
+   * @param value The data to write
+   */
+  writeEndian = this.write;
+  /**
+   * Write data to the buffer backwards (for the endian)
+   */
+  writeBackwardsEndian = this.writeBackwards;
+  /**
+   * Write a Uint8Array to the buffer (for the endian)
+   * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
+   */
+  writeUint8ArrayEndian = this.write;
+  #isLe = false;
+  /**
+   * If the buffer is little endian
+   */
+  get isLe(): boolean {
+    return this.#isLe;
+  }
+  /**
+   * If the buffer is little endian
+   */
+  set isLe(isLe: boolean) {
+    if (isLe) {
+      this.writeEndian = this.writeBackwards;
+      this.writeBackwardsEndian = this.write;
+      this.writeUint8ArrayEndian = this.writeBackwards;
+    } else {
+      this.writeEndian = this.write;
+      this.writeBackwardsEndian = this.writeBackwards;
+      this.writeUint8ArrayEndian = this.write;
+    }
+    this.#isLe = isLe;
+  }
+  // ->
   /**
    * Write an unsigned integer to the buffer
    * @param value The unsigned int to write
@@ -79,7 +97,7 @@ export abstract class writableBufferBase {
       out.unshift((mask & value) >>> i);
       mask <<= 8;
     }
-    this.write(out);
+    this.writeEndian(out);
     return bytes;
   }
   /**
@@ -97,7 +115,7 @@ export abstract class writableBufferBase {
       out.unshift(Number((mask & value) >> i));
       mask <<= 8n;
     }
-    this.write(out);
+    this.writeEndian(out);
     return bytes;
   }
   /**
@@ -366,7 +384,7 @@ export class writableBufferResize
   }
 }
 export const writableBufferResizeLE =
-  swapEndiannessWritableBuffer(writableBufferResize);
+  addDefaultEndianness(writableBufferResize,true);
 export class writableBufferChunkArray
   extends writableBufferBase
   implements writableBufferStorage
@@ -393,9 +411,7 @@ export class writableBufferChunkArray
     } else {
       this.#buffers = [new Uint8Array(this.#chunkSize)];
       this.#used = 0;
-      (this.isLe ? this.writeBackwards : this.write)(
-        value instanceof writableBufferBase ? value.buffer : value
-      );
+      this.write(value instanceof writableBufferBase ? value.buffer : value);
     }
   }
   get length() {
@@ -426,8 +442,9 @@ export class writableBufferChunkArray
     }
   }
 }
-export const writableBufferChunkArrayLE = swapEndiannessWritableBuffer(
-  writableBufferChunkArray
+export const writableBufferChunkArrayLE = addDefaultEndianness(
+  writableBufferChunkArray,
+  true
 );
 export const writableBuffer = writableBufferChunkArray;
 export const writableBufferLE = writableBufferChunkArrayLE;

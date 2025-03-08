@@ -5,6 +5,7 @@ import {
   float64Array,
   uint8Float64ArrayView,
   isBigEndian,
+  addDefaultEndianness,
 } from "./common";
 import type { asyncify } from "./types";
 const constants = {
@@ -42,6 +43,44 @@ export abstract class readableBufferBase {
    */
   abstract readBackwards(bytes: number): number[];
   // "real" code
+  // Little-endian support: <-
+  /**
+   * Read a Uint8Array from the start of the buffer (endian-dependent)
+   */
+  readUint8ArrayEndian = this.readUint8Array;
+  /**
+   * Read a number array (0-255) from the start of the buffer (endian-dependent)
+   * @param value The data to write
+   */
+  readEndian = this.read;
+  /**
+   * Read a number array (0-255) from the start of the buffer backwards (endian-dependent)
+   */
+  readBackwardsEndian = this.readBackwards;
+  #isLe = false;
+  /**
+   * If the buffer is little endian
+   */
+  get isLe(): boolean {
+    return this.#isLe;
+  }
+  /**
+   * If the buffer is little endian
+   */
+  set isLe(isLe: boolean) {
+    if (isLe) {
+      this.readEndian = this.readBackwards;
+      this.readBackwardsEndian = this.read;
+      this.readUint8ArrayEndian = (...args) =>
+        this.readUint8Array(...args).reverse();
+    } else {
+      this.readEndian = this.read;
+      this.readBackwardsEndian = this.readBackwards;
+      this.readUint8ArrayEndian = this.readUint8Array;
+    }
+    this.#isLe = isLe;
+  }
+  // ->
   /**
    * Read a unsigned integer
    * @param bytes How many bytes the data is
@@ -49,7 +88,7 @@ export abstract class readableBufferBase {
    */
   readUnsignedInt(bytes: number): number {
     return (
-      this.read(bytes)
+      this.readEndian(bytes)
         .reverse()
         .reduce(function (creating, byte, index): number {
           return creating | (byte << (index * 8));
@@ -62,7 +101,7 @@ export abstract class readableBufferBase {
    * @returns The parsed unsigned integer (as a bigint)
    */
   readUnsignedIntBigint(bytes: number): bigint {
-    const read = this.read(bytes);
+    const read = this.readEndian(bytes);
     let output: bigint = 0n;
     for (let index = 0; index < bytes; index++) {
       output <<= 8n;
@@ -118,10 +157,10 @@ export abstract class readableBufferBase {
    */
   readFloat(): number {
     if (isBigEndian) {
-      uint8Float32ArrayView.set(this.read(4));
+      uint8Float32ArrayView.set(this.readEndian(4));
       return float32Array[0];
     } else {
-      uint8Float32ArrayView.set(this.readBackwards(4));
+      uint8Float32ArrayView.set(this.readBackwardsEndian(4));
       return float32Array[0];
     }
   }
@@ -131,10 +170,10 @@ export abstract class readableBufferBase {
    */
   readDouble(): number {
     if (isBigEndian) {
-      uint8Float64ArrayView.set(this.read(8));
+      uint8Float64ArrayView.set(this.readEndian(8));
       return float64Array[0];
     } else {
-      uint8Float64ArrayView.set(this.readBackwards(8));
+      uint8Float64ArrayView.set(this.readBackwardsEndian(8));
       return float64Array[0];
     }
   }
@@ -146,9 +185,9 @@ export abstract class readableBufferBase {
    */
   readString(bytes: number, mutf8: boolean = false): string {
     if (mutf8 === true) {
-      return decodeMutf8(this.readUint8Array(bytes));
+      return decodeMutf8(this.readUint8ArrayEndian(bytes));
     }
-    return decodeUtf8(this.readUint8Array(bytes));
+    return decodeUtf8(this.readUint8ArrayEndian(bytes));
   }
   /**
    * Parse a signed one's complement
@@ -242,10 +281,47 @@ export abstract class readableBufferBaseAsync
   abstract readReadableBuffer(bytes: number): Promise<readableBuffer>;
   abstract read(bytes: number): Promise<number[]>;
   abstract readBackwards(bytes: number): Promise<number[]>;
-  // "real" code
+  // Little-endian support: <-
+  /**
+   * Read a Uint8Array from the start of the buffer (endian-dependent)
+   */
+  readUint8ArrayEndian = this.readUint8Array;
+  /**
+   * Read a number array (0-255) from the start of the buffer (endian-dependent)
+   * @param value The data to write
+   */
+  readEndian = this.read;
+  /**
+   * Read a number array (0-255) from the start of the buffer backwards (endian-dependent)
+   */
+  readBackwardsEndian = this.readBackwards;
+  #isLe = false;
+  /**
+   * If the buffer is little endian
+   */
+  get isLe(): boolean {
+    return this.#isLe;
+  }
+  /**
+   * If the buffer is little endian
+   */
+  set isLe(isLe: boolean) {
+    if (isLe) {
+      this.readEndian = this.readBackwards;
+      this.readBackwardsEndian = this.read;
+      this.readUint8ArrayEndian = (...args) =>
+        this.readUint8Array(...args).then((value) => value.reverse());
+    } else {
+      this.readEndian = this.read;
+      this.readBackwardsEndian = this.readBackwards;
+      this.readUint8ArrayEndian = this.readUint8Array;
+    }
+    this.#isLe = isLe;
+  }
+  // ->
   async readUnsignedInt(bytes: number): Promise<number> {
     return (
-      (await this.read(bytes))
+      (await this.readEndian(bytes))
         .reverse()
         .reduce(function (creating, byte, index): number {
           return creating | (byte << (index * 8));
@@ -253,7 +329,7 @@ export abstract class readableBufferBaseAsync
     );
   }
   async readUnsignedIntBigint(bytes: number): Promise<bigint> {
-    const read = await this.read(bytes);
+    const read = await this.readEndian(bytes);
     let output: bigint = 0n;
     for (let index = 0; index < bytes; index++) {
       output <<= 8n;
@@ -288,27 +364,27 @@ export abstract class readableBufferBaseAsync
   }
   async readFloat(): Promise<number> {
     if (isBigEndian) {
-      uint8Float32ArrayView.set(await this.read(4));
+      uint8Float32ArrayView.set(await this.readEndian(4));
       return float32Array[0];
     } else {
-      uint8Float32ArrayView.set(await this.readBackwards(4));
+      uint8Float32ArrayView.set(await this.readBackwardsEndian(4));
       return float32Array[0];
     }
   }
   async readDouble(): Promise<number> {
     if (isBigEndian) {
-      uint8Float64ArrayView.set(await this.read(8));
+      uint8Float64ArrayView.set(await this.readEndian(8));
       return float64Array[0];
     } else {
-      uint8Float64ArrayView.set(await this.readBackwards(8));
+      uint8Float64ArrayView.set(await this.readBackwardsEndian(8));
       return float64Array[0];
     }
   }
   async readString(bytes: number, mutf8: boolean = false): Promise<string> {
     if (mutf8 === true) {
-      return decodeMutf8(await this.readUint8Array(bytes));
+      return decodeMutf8(await this.readUint8ArrayEndian(bytes));
     }
-    return decodeUtf8(await this.readUint8Array(bytes));
+    return decodeUtf8(await this.readUint8ArrayEndian(bytes));
   }
   async readSignedOnesComplement(bytes: number): Promise<number> {
     const bits = bytes * 8;
@@ -418,3 +494,4 @@ export class readableBuffer extends readableBufferBase {
     return this.read(bytes).reverse();
   }
 }
+export const readableBufferLe = addDefaultEndianness(readableBuffer, true);
