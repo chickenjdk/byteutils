@@ -22,10 +22,10 @@
   },
   "homepage": "https://github.com/chickenjdk/byteutils#readme",
   "devDependencies": {
-    "@types/node": "^22.10.10",
-    "typescript": "^5.6.3"
+    "@types/node": "^22.15.18",
+    "typescript": "^5.8.3"
   },
   "dependencies": {
-    "mutf-8": "^1.1.4"
+    "mutf-8": "^1.2.0"
   }
 }
