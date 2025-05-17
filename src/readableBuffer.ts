@@ -6,8 +6,10 @@ import {
   uint8Float64ArrayView,
   isBigEndian,
   addDefaultEndianness,
+  maybePromiseThen,
+  maybeAsyncCallArr,
 } from "./common";
-import type { asyncify } from "./types";
+import type { asyncify, cloneFunc } from "./types";
 const constants = {
   // 11111111111111111111111111111111
   allOnes: 0xffffffff,
@@ -21,27 +23,29 @@ export abstract class readableBufferBase {
   /**
    * Read from the start of the buffer
    */
-  abstract shift(): number;
+  abstract shift(): number | Promise<number>;
   /**
    * Read a Uint8Array from the start of the buffer
    * @param bytes How many bytes to read
    */
-  abstract readUint8Array(bytes: number): Uint8Array;
+  abstract readUint8Array(bytes: number): Uint8Array | Promise<Uint8Array>;
   /**
    * Read a ReadableBuffer from the start of the buffer
    * @param bytes How many bytes to read
    */
-  abstract readReadableBuffer(bytes: number): readableBuffer;
+  abstract readReadableBuffer(
+    bytes: number
+  ): readableBuffer | Promise<readableBuffer>;
   /**
    * Read a number array (0-255) from the start of the buffer
    * @param bytes How many bytes to read
    */
-  abstract read(bytes: number): number[];
+  abstract read(bytes: number): number[] | Promise<number[]>;
   /**
    * Read a number array (0-255) from the start of the buffer backwards
    * @param bytes How many bytes to read
    */
-  abstract readBackwards(bytes: number): number[];
+  abstract readBackwards(bytes: number): number[] | Promise<number[]>;
   // "real" code
   // Little-endian support: <-
   /**
@@ -52,11 +56,13 @@ export abstract class readableBufferBase {
    * Read a number array (0-255) from the start of the buffer (endian-dependent)
    * @param value The data to write
    */
-  readEndian = this.read;
+  readEndian: cloneFunc<typeof this.read | typeof this.readBackwards> =
+    this.read;
   /**
    * Read a number array (0-255) from the start of the buffer backwards (endian-dependent)
    */
-  readBackwardsEndian = this.readBackwards;
+  readBackwardsEndian: cloneFunc<typeof this.read | typeof this.readBackwards> =
+    this.readBackwards;
   #isLe = false;
   /**
    * If the buffer is little endian
@@ -72,7 +78,9 @@ export abstract class readableBufferBase {
       this.readEndian = this.readBackwards;
       this.readBackwardsEndian = this.read;
       this.readUint8ArrayEndian = (...args) =>
-        this.readUint8Array(...args).reverse();
+        maybePromiseThen(this.readUint8Array(...args), (read) =>
+          read.reverse()
+        );
     } else {
       this.readEndian = this.read;
       this.readBackwardsEndian = this.readBackwards;
@@ -86,11 +94,11 @@ export abstract class readableBufferBase {
    * @param bytes How many bytes the data is
    * @returns The parsed unsigned integer
    */
-  readUnsignedInt(bytes: number): number {
-    return (
-      this.readEndian(bytes)
-        .reverse()
-        .reduce(function (creating, byte, index): number {
+  readUnsignedInt(bytes: number) {
+    return maybePromiseThen(
+      this.readEndian(bytes),
+      (read) =>
+        read.reverse().reduce(function (creating, byte, index): number {
           return creating | (byte << (index * 8));
         }, 0) >>> 0
     );
@@ -100,81 +108,94 @@ export abstract class readableBufferBase {
    * @param bytes How many bytes the data is
    * @returns The parsed unsigned integer (as a bigint)
    */
-  readUnsignedIntBigint(bytes: number): bigint {
-    const read = this.readEndian(bytes);
-    let output: bigint = 0n;
-    for (let index = 0; index < bytes; index++) {
-      output <<= 8n;
-      output |= BigInt(read[index]);
-    }
-    return output;
+  readUnsignedIntBigint(bytes: number) {
+    return maybePromiseThen(this.readEndian(bytes), (read) => {
+      let output: bigint = 0n;
+      for (let index = 0; index < bytes; index++) {
+        output <<= 8n;
+        output |= BigInt(read[index]);
+      }
+      return output;
+    });
   }
   /**
    * Parse a two's complement
    * @param bytes How many bytes it is
    * @returns The parsed twos complement
    */
-  readTwosComplement(bytes: number): number {
-    const value = this.readUnsignedInt(bytes);
-    const bits = bytes * 8;
-    // Just pad the value with 1s
-    return (value & (1 << (bits - 1))) !== 0
-      ? (constants.allOnes << bits) | value
-      : value;
+  readTwosComplement(bytes: number) {
+    return maybePromiseThen(this.readUnsignedInt(bytes), (read) => {
+      const bits = bytes * 8;
+      // Just pad the value with 1s
+      return (read & (1 << (bits - 1))) !== 0
+        ? (constants.allOnes << bits) | read
+        : read;
+    });
   }
   /**
    * Parse a two's complement as a bigint
    * @param bytes How many bytes it is
    * @returns The parsed twos complement (as a bigint)
    */
-  readTwosComplementBigint(bytes: number): bigint {
-    const value = this.readUnsignedIntBigint(bytes);
-    const bits = BigInt(bytes * 8);
-    // Just pad the value with 1s
-    return (value & (1n << (bits - 1n))) !== 0n ? (-1n << bits) | value : value;
+  readTwosComplementBigint(bytes: number) {
+    return maybePromiseThen(this.readUnsignedIntBigint(bytes), (read) => {
+      const bits = BigInt(bytes * 8);
+      // Just pad the value with 1s
+      return (read & (1n << (bits - 1n))) !== 0n ? (-1n << bits) | read : read;
+    });
   }
   /**
    * Parse a two's complement from a single byte
    * @returns The parsed twos complement
    */
-  readTwosComplementByte(): number {
-    const byte = this.shift();
-    return byte & 0b10000000 ? byte | constants.allOnesButLastByte : byte;
+  readTwosComplementByte() {
+    return maybePromiseThen(this.shift(), (byte) =>
+      byte & 0b10000000 ? byte | constants.allOnesButLastByte : byte
+    );
   }
   /**
    * Parse a two's complements from single bytes
    * @param bytes How many two's complements to parse
    * @returns The parsed twos complements
    */
-  readTwosComplementByteArray(bytes: number): number[] {
-    return Array(bytes)
-      .fill(undefined)
-      .map(this.readTwosComplementByte.bind(this));
+  readTwosComplementByteArray(bytes: number) {
+    return maybeAsyncCallArr(
+      this.readTwosComplementByte.bind(this),
+      Array(bytes).fill([])
+    );
   }
   /**
    * Parse a float
    * @returns The parsed float
    */
-  readFloat(): number {
+  readFloat() {
     if (isBigEndian) {
-      uint8Float32ArrayView.set(this.readEndian(4));
-      return float32Array[0];
+      return maybePromiseThen(this.readEndian(4), (read) => {
+        uint8Float32ArrayView.set(read);
+        return float32Array[0];
+      });
     } else {
-      uint8Float32ArrayView.set(this.readBackwardsEndian(4));
-      return float32Array[0];
+      return maybePromiseThen(this.readBackwardsEndian(4), (read) => {
+        uint8Float32ArrayView.set(read);
+        return float32Array[0];
+      });
     }
   }
   /**
    * Parse a double
    * @returns The parsed float
    */
-  readDouble(): number {
+  readDouble() {
     if (isBigEndian) {
-      uint8Float64ArrayView.set(this.readEndian(8));
-      return float64Array[0];
+      return maybePromiseThen(this.readEndian(4), (read) => {
+        uint8Float64ArrayView.set(read);
+        return float64Array[0];
+      });
     } else {
-      uint8Float64ArrayView.set(this.readBackwardsEndian(8));
-      return float64Array[0];
+      return maybePromiseThen(this.readBackwardsEndian(4), (read) => {
+        uint8Float64ArrayView.set(read);
+        return float64Array[0];
+      });
     }
   }
   /**
@@ -183,258 +204,110 @@ export abstract class readableBufferBase {
    * @param [mutf8=false] If the string is mutf8
    * @returns The parsed string
    */
-  readString(bytes: number, mutf8: boolean = false): string {
+  readString(bytes: number, mutf8: boolean = false) {
     if (mutf8 === true) {
-      return decodeMutf8(this.readUint8ArrayEndian(bytes));
+      return maybePromiseThen(this.readUint8ArrayEndian(bytes), (read) =>
+        decodeMutf8(read)
+      );
     }
-    return decodeUtf8(this.readUint8ArrayEndian(bytes));
+    return maybePromiseThen(this.readUint8ArrayEndian(bytes), (read) =>
+      decodeUtf8(read)
+    );
   }
   /**
    * Parse a signed one's complement
    * @param bytes How long the signed one's complement is
    * @returns The parsed signed ones compement
    */
-  readSignedOnesComplement(bytes: number): number {
+  readSignedOnesComplement(bytes: number) {
     const bits = bytes * 8;
-    const value = this.readUnsignedInt(bytes);
-    return (value & (1 << (bits - 1))) !== 0
-      ? -(~value & (constants.allOnes >>> (33 - bits)))
-      : value;
+    return maybePromiseThen(this.readUnsignedInt(bytes), (read) =>
+      (read & (1 << (bits - 1))) !== 0
+        ? -(~read & (constants.allOnes >>> (33 - bits)))
+        : read
+    );
   }
   /**
    * Parse a signed one's complement as a bigint
    * @param bytes How long the signed one's complement is
    * @returns The parsed signed ones compement (as a bigint)
    */
-  readSignedOnesComplementBigint(bytes: number): bigint {
+  readSignedOnesComplementBigint(bytes: number) {
     const bits = BigInt(bytes * 8);
-    const value = this.readUnsignedIntBigint(bytes);
-    return (value & (1n << (bits - 1n))) !== 0n
-      ? -(~value & ~(-1n << (bits - 1n)))
-      : value;
+    return maybePromiseThen(this.readUnsignedIntBigint(bytes), (read) =>
+      (read & (1n << (bits - 1n))) !== 0n
+        ? -(~read & ~(-1n << (bits - 1n)))
+        : read
+    );
   }
   /**
    * Parse a signed one's complement from a byte
    * @param bytes How long the signed one's complement is
    * @returns The parsed signed one's compement
    */
-  readSignedOnesComplementByte(): number {
-    const byte = this.shift();
-    return byte & 0b10000000 ? -(~byte & 0b01111111) : byte;
+  readSignedOnesComplementByte() {
+    // Possible: We invert the bits then 0 the first bit if the origional has the first bit as one, so the removal of the first bit is kind of useless. (By first bit I mean 0b10000000)
+    return maybePromiseThen(this.shift(), (byte) =>
+      byte & 0b10000000 ? -(~byte & 0b01111111) : byte
+    );
   }
   /**
    * Parse signed one's complements (one byte each) from bytes
    * @param bytes How many one's complements to read
    * @returns The parsed signed one's compements
    */
-  readSignedOnesComplementByteArray(bytes: number): number[] {
-    return Array(bytes)
-      .fill(undefined)
-      .map(this.readSignedOnesComplementByte.bind(this));
+  readSignedOnesComplementByteArray(bytes: number) {
+    return maybeAsyncCallArr(
+      this.readSignedOnesComplementByte.bind(this),
+      Array(bytes).fill([])
+    );
   }
   /**
    * Parse a signed integer
    * @param bytes How many bytes long the signed integer is
    * @returns The parsed signed integer
    */
-  readSignedInteger(bytes: number): number {
+  readSignedInteger(bytes: number) {
     const bits = bytes * 8;
-    const value = this.readUnsignedInt(bytes);
-    const sign = value & (1 << (bits - 1));
-    return sign === 0 ? value ^ sign : -(value ^ sign);
+    return maybePromiseThen(this.readUnsignedInt(bytes), (read) => {
+      const sign = read & (1 << (bits - 1));
+      return sign === 0 ? read ^ sign : -(read ^ sign);
+    });
   }
   /**
    * Parse a signed integer as a bigint
    * @param bytes How many bytes long the signed integer is
    * @returns The parsed signed integer (as a bigint)
    */
-  readSignedIntegerBigint(bytes: number): bigint {
+  readSignedIntegerBigint(bytes: number) {
     const bits = BigInt(bytes * 8);
-    const value = this.readUnsignedIntBigint(bytes);
-    const sign = value & (1n << (bits - 1n));
-    return sign === 0n ? value ^ sign : -(value ^ sign);
+    return maybePromiseThen(this.readUnsignedIntBigint(bytes), (read) => {
+      const sign = read & (1n << (bits - 1n));
+      return sign === 0n ? read ^ sign : -(read ^ sign);
+    });
   }
   /**
    * Parse a signed integer from a byte
    * @returns The parsed signed integer
    */
-  readSignedIntegerByte(): number {
-    const byte = this.shift();
-    return byte & 0b10000000 ? -(byte & 0b01111111) : byte & 0b01111111;
+  readSignedIntegerByte() {
+    return maybePromiseThen(this.shift(), (byte) =>
+      byte & 0b10000000 ? -(byte & 0b01111111) : byte & 0b01111111
+    );
   }
   /**
    * Parse a signed integer from a byte
    * @returns The parsed signed integers
    */
-  readSignedIntegerByteArray(bytes: number): number[] {
-    return Array(bytes)
-      .fill(undefined)
-      .map(this.readSignedIntegerByte.bind(this));
-  }
-}
-export abstract class readableBufferBaseAsync
-  implements asyncify<readableBufferBase>
-{
-  // Methods to implement
-  abstract shift(): Promise<number>;
-  abstract readUint8Array(bytes: number): Promise<Uint8Array>;
-  abstract readReadableBuffer(bytes: number): Promise<readableBuffer>;
-  abstract read(bytes: number): Promise<number[]>;
-  abstract readBackwards(bytes: number): Promise<number[]>;
-  // Little-endian support: <-
-  /**
-   * Read a Uint8Array from the start of the buffer (endian-dependent)
-   */
-  readUint8ArrayEndian = this.readUint8Array;
-  /**
-   * Read a number array (0-255) from the start of the buffer (endian-dependent)
-   * @param value The data to write
-   */
-  readEndian = this.read;
-  /**
-   * Read a number array (0-255) from the start of the buffer backwards (endian-dependent)
-   */
-  readBackwardsEndian = this.readBackwards;
-  #isLe = false;
-  /**
-   * If the buffer is little endian
-   */
-  get isLe(): boolean {
-    return this.#isLe;
-  }
-  /**
-   * If the buffer is little endian
-   */
-  set isLe(isLe: boolean) {
-    if (isLe) {
-      this.readEndian = this.readBackwards;
-      this.readBackwardsEndian = this.read;
-      this.readUint8ArrayEndian = (...args) =>
-        this.readUint8Array(...args).then((value) => value.reverse());
-    } else {
-      this.readEndian = this.read;
-      this.readBackwardsEndian = this.readBackwards;
-      this.readUint8ArrayEndian = this.readUint8Array;
-    }
-    this.#isLe = isLe;
-  }
-  // ->
-  async readUnsignedInt(bytes: number): Promise<number> {
-    return (
-      (await this.readEndian(bytes))
-        .reverse()
-        .reduce(function (creating, byte, index): number {
-          return creating | (byte << (index * 8));
-        }, 0) >>> 0
+  readSignedIntegerByteArray(bytes: number) {
+    return maybeAsyncCallArr(
+      this.readSignedIntegerByte.bind(this),
+      Array(bytes).fill([])
     );
   }
-  async readUnsignedIntBigint(bytes: number): Promise<bigint> {
-    const read = await this.readEndian(bytes);
-    let output: bigint = 0n;
-    for (let index = 0; index < bytes; index++) {
-      output <<= 8n;
-      output |= BigInt(read[index]);
-    }
-    return output;
-  }
-  async readTwosComplement(bytes: number): Promise<number> {
-    const value = await this.readUnsignedInt(bytes);
-    const bits = bytes * 8;
-    // Just pad the value with 1s
-    return (value & (1 << (bits - 1))) !== 0
-      ? (constants.allOnes << bits) | value
-      : value;
-  }
-  async readTwosComplementBigint(bytes: number): Promise<bigint> {
-    const value = await this.readUnsignedIntBigint(bytes);
-    const bits = BigInt(bytes * 8);
-    // Just pad the value with 1s
-    return (value & (1n << (bits - 1n))) !== 0n ? (-1n << bits) | value : value;
-  }
-  async readTwosComplementByte(): Promise<number> {
-    const byte = await this.shift();
-    return byte & 0b10000000 ? byte | constants.allOnesButLastByte : byte;
-  }
-  async readTwosComplementByteArray(bytes: number): Promise<number[]> {
-    const output: number[] = [];
-    for (let index = 0; index < bytes; index++) {
-      output.push(await this.readTwosComplementByte());
-    }
-    return output;
-  }
-  async readFloat(): Promise<number> {
-    if (isBigEndian) {
-      uint8Float32ArrayView.set(await this.readEndian(4));
-      return float32Array[0];
-    } else {
-      uint8Float32ArrayView.set(await this.readBackwardsEndian(4));
-      return float32Array[0];
-    }
-  }
-  async readDouble(): Promise<number> {
-    if (isBigEndian) {
-      uint8Float64ArrayView.set(await this.readEndian(8));
-      return float64Array[0];
-    } else {
-      uint8Float64ArrayView.set(await this.readBackwardsEndian(8));
-      return float64Array[0];
-    }
-  }
-  async readString(bytes: number, mutf8: boolean = false): Promise<string> {
-    if (mutf8 === true) {
-      return decodeMutf8(await this.readUint8ArrayEndian(bytes));
-    }
-    return decodeUtf8(await this.readUint8ArrayEndian(bytes));
-  }
-  async readSignedOnesComplement(bytes: number): Promise<number> {
-    const bits = bytes * 8;
-    const value = await this.readUnsignedInt(bytes);
-    return (value & (1 << (bits - 1))) !== 0
-      ? -(~value & (constants.allOnes >>> (33 - bits)))
-      : value;
-  }
-  async readSignedOnesComplementBigint(bytes: number): Promise<bigint> {
-    const bits = BigInt(bytes * 8);
-    const value: bigint = await this.readUnsignedIntBigint(bytes);
-    return (value & (1n << (bits - 1n))) !== 0n
-      ? -(~value & ~(-1n << (bits - 1n)))
-      : value;
-  }
-  async readSignedOnesComplementByte(): Promise<number> {
-    const byte = await this.shift();
-    return byte & 0b10000000 ? -(~byte & 0b01111111) : byte;
-  }
-  async readSignedOnesComplementByteArray(bytes: number): Promise<number[]> {
-    const output: number[] = [];
-    for (let index = 0; index < bytes; index++) {
-      output.push(await this.readSignedOnesComplementByte());
-    }
-    return output;
-  }
-  async readSignedInteger(bytes: number): Promise<number> {
-    const bits = bytes * 8;
-    const value = await this.readUnsignedInt(bytes);
-    const sign = value & (1 << (bits - 1));
-    return sign === 0 ? value ^ sign : -(value ^ sign);
-  }
-  async readSignedIntegerBigint(bytes: number): Promise<bigint> {
-    const bits = BigInt(bytes * 8);
-    const value = await this.readUnsignedIntBigint(bytes);
-    const sign = value & (1n << (bits - 1n));
-    return sign === 0n ? value ^ sign : -(value ^ sign);
-  }
-  async readSignedIntegerByte(): Promise<number> {
-    const byte = await this.shift();
-    return byte & 0b10000000 ? -(byte & 0b01111111) : byte & 0b01111111;
-  }
-  async readSignedIntegerByteArray(bytes: number): Promise<number[]> {
-    const output: number[] = [];
-    for (let index = 0; index < bytes; index++) {
-      output.push(await this.readSignedIntegerByte());
-    }
-    return output;
-  }
 }
+
+export const readableBufferBaseAsync = readableBufferBase;
 
 export class readableBuffer extends readableBufferBase {
   #buffer: Uint8Array;

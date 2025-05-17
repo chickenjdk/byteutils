@@ -6,8 +6,10 @@ import {
   isBigEndian,
   uint8Float32ArrayView,
   uint8Float64ArrayView,
+  wrapForPromise,
+  wrapForAsyncCallArr,
 } from "./common";
-import { uint8ArrayLike } from "./types";
+import { uint8ArrayLike, cloneFunc } from "./types";
 const constants = {
   // 11111111111111111111111111111111
   allOnes: 0xffffffff,
@@ -22,16 +24,16 @@ export abstract class writableBufferBase {
    * Write data to the buffer (first byte first written to the end[BE])
    * @param value The data to write
    */
-  abstract write(value: uint8ArrayLike): void;
+  abstract write(value: uint8ArrayLike): void | Promise<void>;
   /**
    * Write data to the buffer backwards (last byte first written to the end[LE])
    */
-  abstract writeBackwards(value: uint8ArrayLike): void;
+  abstract writeBackwards(value: uint8ArrayLike): void | Promise<void>;
   /**
    * Push a byte to the buffer's end
    * @param value the byte to push
    */
-  abstract push(value: number): void;
+  abstract push(value: number): void | Promise<void>;
   /**
    * Write a Uint8Array to the buffer (first byte first written to the end[BE])
    * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
@@ -40,24 +42,30 @@ export abstract class writableBufferBase {
   /**
    * White a writeable buffer storing data to the buffer
    */
-  writeWriteableBuffer(value: writableBufferStorage): void {
+  writeWriteableBuffer(value: writableBufferStorage): void | Promise<void> {
     this.write(Array.prototype.slice.call(value.buffer, 0));
   }
   // Little-endian support: <-
   /**
-   * Write data to the buffer (endian-dependent)
+   * Write data to the buffer (writes data that was origionaly in BE format to the endianness of the buffer)
    * @param value The data to write
    */
-  writeEndian = this.write;
+  writeEndian: cloneFunc<typeof this.write | typeof this.writeBackwards> =
+    this.write;
   /**
-   * Write data to the buffer backwards (for the endian)
+   * Write data to the buffer backwards (writes data that was origionaly in LE format to the endianness of the buffer, I know that "backwards" is a little opinionated but the class was origionaly BE-only and I did not want to change too mutch)
+   * @param value The data to write
    */
-  writeBackwardsEndian = this.writeBackwards;
+  writeBackwardsEndian: cloneFunc<
+    typeof this.write | typeof this.writeBackwards
+  > = this.writeBackwards;
   /**
    * Write a Uint8Array to the buffer (for the endian)
    * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
    */
-  writeUint8ArrayEndian = this.write;
+  writeUint8ArrayEndian: cloneFunc<
+    typeof this.write | typeof this.writeBackwards
+  > = this.write;
   #isLe = false;
   /**
    * If the buffer is little endian
@@ -81,13 +89,14 @@ export abstract class writableBufferBase {
     this.#isLe = isLe;
   }
   // ->
+  // REMEMBER: return type is not specifyed so if writeEndian or whatever is not async, promise will hopefully be removed from the return type via wrapForPromise dynamic return type
   /**
    * Write an unsigned integer to the buffer
    * @param value The unsigned int to write
    * @param bytes How many bytes the unsined int is (If not provided, it will write the minimum length)
    * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeUnsignedInt(value: number, bytes?: number): number {
+  writeUnsignedInt(value: number, bytes?: number) {
     let mask = 0b11111111;
     let out: number[] = [];
     let i = -8;
@@ -97,8 +106,7 @@ export abstract class writableBufferBase {
       out.unshift((mask & value) >>> i);
       mask <<= 8;
     }
-    this.writeEndian(out);
-    return bytes;
+    return wrapForPromise(this.writeEndian(out), bytes);
   }
   /**
    * Write an unsigned integer to the buffer
@@ -106,7 +114,7 @@ export abstract class writableBufferBase {
    * @param bytes How many bytes the unsined int is (If not provided, it will write the minimum length)
    * @returns How many bytes were written (Same as bytes parameter)
    */
-  writeUnsignedIntBigint(value: bigint, bytes: number): number {
+  writeUnsignedIntBigint(value: bigint, bytes: number) {
     let mask = 0b11111111n;
     let out: number[] = [];
     let i = -8n;
@@ -115,8 +123,7 @@ export abstract class writableBufferBase {
       out.unshift(Number((mask & value) >> i));
       mask <<= 8n;
     }
-    this.writeEndian(out);
-    return bytes;
+    return wrapForPromise(this.writeEndian(out), bytes);
   }
   /**
    * Write a twos complement to the buffer
@@ -124,16 +131,18 @@ export abstract class writableBufferBase {
    * @param bytes How long the twos complement to be written is in bytes
    * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeTwosComplement(value: number, bytes?: number): number {
+  writeTwosComplement(value: number, bytes?: number) {
     const bitsLength = 32 - Math.clz32(Math.abs(value));
     bytes ||= Math.ceil((bitsLength + 1) / 8);
-    this.writeUnsignedInt(
-      value < 0
-        ? ((constants.allOnes >>> ((4 - bytes) * 8)) & value) >>> 0
-        : value,
+    return wrapForPromise(
+      this.writeUnsignedInt(
+        value < 0
+          ? ((constants.allOnes >>> ((4 - bytes) * 8)) & value) >>> 0
+          : value,
+        bytes
+      ),
       bytes
     );
-    return bytes;
   }
   /**
    * Write a twos complement to the buffer (From a bigint)
@@ -141,67 +150,78 @@ export abstract class writableBufferBase {
    * @param bytes How long the twos complement to be written is in bytes
    * @returns How many bytes were written (Same as bytes parameter)
    */
-  writeTwosComplementBigint(value: bigint, bytes: number): number {
-    this.writeUnsignedIntBigint(
-      value < 0n ? ~(-1n << BigInt(bytes * 8)) & value : value,
+  writeTwosComplementBigint(value: bigint, bytes: number) {
+    return wrapForPromise(
+      this.writeUnsignedIntBigint(
+        value < 0n ? ~(-1n << BigInt(bytes * 8)) & value : value,
+        bytes
+      ),
       bytes
     );
-    return bytes;
   }
   /**
    * Write a twos complement to the buffer (one byte)
    * @param value The number to encode
    */
-  writeTwosComplementByte(value: number): void {
-    this.push((value & 0b11111111) >>> 0);
+  writeTwosComplementByte(value: number) {
+    return wrapForPromise(void 0, this.push((value & 0b11111111) >>> 0));
   }
   /**
    * Write twos complements to the buffer (one byte each)
    * @param values The numbers to encode
    */
-  writeTwosComplementByteArray(values: number[]): void {
-    values.forEach(this.writeTwosComplementByte.bind(this));
+  writeTwosComplementByteArray(values: number[]) {
+    return wrapForAsyncCallArr(
+      this.writeTwosComplementByte.bind(this),
+      values.map((value) => [value]),
+      void 0
+    );
   }
   /**
    * Write a float to the buffer
    * @param value The float to write
    */
-  writeFloat(value: number): void {
+  writeFloat(value: number) {
     float32Array[0] = value;
     // Typed arrays are endian-dependent, so if the computer is little-endian, the output will be in little-endian format
     if (isBigEndian) {
-      this.write(uint8Float32ArrayView);
+      return wrapForPromise(void 0, this.writeEndian(uint8Float32ArrayView));
     } else {
-      this.writeBackwards(uint8Float32ArrayView);
+      return wrapForPromise(
+        void 0,
+        this.writeBackwardsEndian(uint8Float32ArrayView)
+      );
     }
   }
   /**
    * Write a double float to the buffer
    * @param value The double float to write
    */
-  writeDouble(value: number): void {
+  writeDouble(value: number): void | Promise<void> {
     float64Array[0] = value;
     if (isBigEndian) {
-      this.write(uint8Float64ArrayView);
+      return wrapForPromise(void 0, this.writeEndian(uint8Float64ArrayView));
     } else {
-      this.writeBackwards(uint8Float64ArrayView);
+      return wrapForPromise(
+        void 0,
+        this.writeBackwardsEndian(uint8Float64ArrayView)
+      );
     }
   }
   /**
-   * Write a string to the buffer
+   * Write a utf8 string to the buffer
    * @param value
    * @param mutf8 If true, write in java's mutf8 format instead
    * @returns How many bytes were written
    */
-  writeString(value: string, mutf8: boolean = false): number {
+  writeString(value: string, mutf8: boolean = false): number | Promise<number> {
     let encoded: uint8ArrayLike;
     if (mutf8 === true) {
       encoded = encodeMutf8(value);
     } else {
       encoded = encodeUtf8(value);
     }
-    this.write(encoded);
-    return encoded.length;
+    return wrapForPromise(this.write(encoded), encoded.length);
   }
   /**
    * Encode and write a signed one's complement
@@ -209,16 +229,21 @@ export abstract class writableBufferBase {
    * @param bytes How many bytes to make the encoded value
    * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeSignedOnesComplement(value: number, bytes?: number): number {
+  writeSignedOnesComplement(
+    value: number,
+    bytes?: number
+  ): number | Promise<number> {
     bytes ||= Math.ceil((33 - Math.clz32(Math.abs(value))) / 8);
-    this.writeUnsignedInt(
-      value < 0
-        ? (value - 1) & (constants.allOnes >>> (32 - bytes * 8))
-        : // Rely on the user not to use to big of a value
-          value /* & (constants.allOnes >>> (32 - bytes * 8))*/,
+    return wrapForPromise(
+      this.writeUnsignedInt(
+        value < 0
+          ? (value - 1) & (constants.allOnes >>> (32 - bytes * 8))
+          : // Rely on the user not to use to big of a value
+            value /* & (constants.allOnes >>> (32 - bytes * 8))*/,
+        bytes
+      ),
       bytes
     );
-    return bytes;
   }
   /**
    * Encode and write a signed ones complement (from a bigint)
@@ -226,29 +251,41 @@ export abstract class writableBufferBase {
    * @param bytes How many bytes to make the encoded value
    * @returns How many bytes were written (Same as bytes parameter)
    */
-  writeSignedOnesComplementBigint(value: bigint, bytes: number): number {
-    this.writeUnsignedIntBigint(
-      value < 0n
-        ? (value - 1n) & ~(-1n << BigInt(32 - bytes * 8))
-        : // Rely on the user not to use to big of a value
-          value /* & (constants.allOnes >>> (32 - bytes * 8))*/,
+  writeSignedOnesComplementBigint(
+    value: bigint,
+    bytes: number
+  ): number | Promise<number> {
+    return wrapForPromise(
+      this.writeUnsignedIntBigint(
+        value < 0n
+          ? (value - 1n) & ~(-1n << BigInt(32 - bytes * 8))
+          : // Rely on the user not to use to big of a value
+            value /* & (constants.allOnes >>> (32 - bytes * 8))*/,
+        bytes
+      ),
       bytes
     );
-    return bytes;
   }
   /**
    * Encode and write a signed ones complement (one byte)
    * @param value The number to encode
    */
-  writeSignedOnesComplementByte(value: number): void {
-    this.push(value < 0 ? (value - 1) & 0xff : value);
+  writeSignedOnesComplementByte(value: number) {
+    return wrapForPromise(
+      this.push(value < 0 ? (value - 1) & 0xff : value),
+      void 0
+    );
   }
   /**
    * Encode and write a signed ones complements
    * @param values The numbers to encode
    */
-  writeSignedOnesComplementByteArray(values: number[]): void {
-    values.forEach(this.writeSignedOnesComplementByte.bind(this));
+  writeSignedOnesComplementByteArray(values: number[]) {
+    return wrapForAsyncCallArr(
+      this.writeSignedOnesComplementByte.bind(this),
+      values.map((value) => [value]),
+      void 0
+    );
   }
   /**
    * Encode and write a signed integer
@@ -256,18 +293,20 @@ export abstract class writableBufferBase {
    * @param bytes How many bytes to make the encoded value
    * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeSignedInteger(value: number, bytes?: number): number {
+  writeSignedInteger(value: number, bytes?: number) {
     const absValue = Math.abs(value);
     bytes ||= Math.ceil((33 - Math.clz32(absValue)) / 8);
     const bits = bytes * 8;
-    this.writeUnsignedInt(
-      value < 0
-        ? // Rely on the user not to use to big of a value
-          absValue | (1 << (bits - 1)) // & (constants.allOnes >>> (32 - bits))
-        : value,
+    return wrapForPromise(
+      this.writeUnsignedInt(
+        value < 0
+          ? // Rely on the user not to use to big of a value
+            absValue | (1 << (bits - 1)) // & (constants.allOnes >>> (32 - bits))
+          : value,
+        bytes
+      ),
       bytes
     );
-    return bytes;
   }
   /**
    * Encode and write a signed integer (from a bigint)
@@ -275,31 +314,40 @@ export abstract class writableBufferBase {
    * @param bytes How many bytes to make the encoded value
    * @returns How many bytes were written (Same as bytes parameter)
    */
-  writeSignedIntegerBigint(value: bigint, bytes: number): number {
+  writeSignedIntegerBigint(value: bigint, bytes: number) {
     // const oneLiner = (value,bytes) =>  value < 0n ? -value | (1n << (BigInt(bytes*8) - 1n)) : value;
     const bits = BigInt(bytes * 8);
-    this.writeUnsignedIntBigint(
-      value < 0n
-        ? // Rely on the user not to use to big of a value
-          -value | (1n << (bits - 1n)) // & ~(-1n << bits)
-        : value,
+    return wrapForPromise(
+      this.writeUnsignedIntBigint(
+        value < 0n
+          ? // Rely on the user not to use to big of a value
+            -value | (1n << (bits - 1n)) // & ~(-1n << bits)
+          : value,
+        bytes
+      ),
       bytes
     );
-    return bytes;
   }
   /**
    * Encode and write a signed integer (one byte)
    * @param value The number to encode
    */
-  writeSignedIntegerByte(value: number): void {
-    this.push(value < 0 ? 0b10000000 | -value : value);
+  writeSignedIntegerByte(value: number) {
+    return wrapForPromise(
+      this.push(value < 0 ? 0b10000000 | -value : value),
+      void 0
+    );
   }
   /**
    * Encode and write signed integers (one byte)
    * @param values The numbers to encode
    */
-  writeSignedIntegerByteArray(values: number[]): void {
-    values.forEach(this.writeSignedIntegerByte.bind(this));
+  writeSignedIntegerByteArray(values: number[]) {
+    return wrapForAsyncCallArr(
+      this.writeSignedIntegerByte.bind(this),
+      values.map((value) => [value]),
+      void 0
+    );
   }
 }
 export declare abstract class writableBufferStorage extends writableBufferBase {
@@ -383,8 +431,10 @@ export class writableBufferResize
     this.write(Array.prototype.slice.call(value.buffer, 0));
   }
 }
-export const writableBufferResizeLE =
-  addDefaultEndianness(writableBufferResize,true);
+export const writableBufferResizeLE = addDefaultEndianness(
+  writableBufferResize,
+  true
+);
 export class writableBufferChunkArray
   extends writableBufferBase
   implements writableBufferStorage

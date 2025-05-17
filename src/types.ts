@@ -12,3 +12,5 @@ export type IsAUnionAtTopLevel<T, U = T> = U extends any ? [T] extends [U[any]] 
 // Logic thanks to https://stackoverflow.com/a/79012805
 export type topLevelUnionArray<Array extends any[]> = Array extends [infer First,...infer Rest] ? First extends any ? Rest extends [any,...any[]] ? [First,...topLevelUnionArray<Rest>] : [First] : never : never;
 export type json = {[key in string | number]:(string|number|json)[] | string | number | json};
+export type cloneFunc<T> = T extends (...args:infer A) => infer R ? (...args:A) => R : never;
+export type AwaitedUnion<T> = T extends Promise<infer U> ? AwaitedUnion<U> : T;
