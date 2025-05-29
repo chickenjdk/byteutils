@@ -1,13 +1,12 @@
 {
   "name": "@chickenjdk/byteutils",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Some utilitys for working with binary data",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "publish": "npm publish --access=public"
-  },
+    "build": "tsc"
+    },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/chickenjdk/byteutils.git"
