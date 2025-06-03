@@ -1,0 +1,33 @@
+name: Deploy Docs on Release
+
+on:
+  release:
+    types: [published] # Not edited or draft
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to push to gh-pages
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'  # Match your project's Node.js version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build docs with TypeDoc
+        run: npm run docs
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          destination_dir: docs/${{ github.ref_name }}
+          keep_files: true

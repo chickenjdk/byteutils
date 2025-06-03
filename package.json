@@ -1,12 +1,13 @@
 {
   "name": "@chickenjdk/byteutils",
-  "version": "2.2.0",
+  "version": "3.0.0",
   "description": "Some utilitys for working with binary data",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc"
-    },
+    "build": "tsc",
+    "docs": "typedoc --options typedoc.json"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/chickenjdk/byteutils.git"
@@ -22,6 +23,7 @@
   "homepage": "https://github.com/chickenjdk/byteutils#readme",
   "devDependencies": {
     "@types/node": "^22.15.29",
+    "typedoc": "^0.28.5",
     "typescript": "^5.8.3"
   },
   "dependencies": {
