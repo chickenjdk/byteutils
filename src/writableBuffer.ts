@@ -10,7 +10,7 @@ import {
   wrapForPromise,
   wrapForAsyncCallArr,
 } from "./common";
-import { uint8ArrayLike, cloneFunc } from "./types";
+import { uint8ArrayLike, cloneFunc, MaybePromise, mergeValues } from "./types";
 const constants = {
   // 11111111111111111111111111111111
   allOnes: 0xffffffff,
@@ -20,54 +20,70 @@ const constants = {
   allOnesButLastByte: 0xffffff00,
 };
 // Returns not typed for non-abstract/abstracet alias methods
-export abstract class writableBufferBase {
+export abstract class writableBufferBase<
+  IsAsync extends boolean = true | false
+> {
   // Methods to implement
   /**
-   * Write data to the buffer (first byte first written to the end[BE])
+   * Write a array of bytes (numbers 0-255) to the buffer (first byte first written to the end[BE])
    * @param value The data to write
    */
-  abstract write(value: uint8ArrayLike): void | Promise<void>;
+  abstract writeArray(value: number[]): MaybePromise<void, IsAsync>;
   /**
-   * Write data to the buffer backwards (last byte first written to the end[LE])
+   * Write a array of bytes (numbers 0-255) to the buffer backwards (last byte first written to the end[LE])
    */
-  abstract writeBackwards(value: uint8ArrayLike): void | Promise<void>;
-  /**
-   * Push a byte to the buffer's end
-   * @param value the byte to push
-   */
-  abstract push(value: number): void | Promise<void>;
+  abstract writeArrayBackwards(value: number[]): MaybePromise<void, IsAsync>;
   /**
    * Write a Uint8Array to the buffer (first byte first written to the end[BE])
-   * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
    */
-  writeUint8Array = this.write;
+  abstract writeUint8Array(value: Uint8Array): MaybePromise<void, IsAsync>;
   /**
-   * White a writeable buffer storing data to the buffer
+   * Write a Uint8Array to the buffer backward (last byte first written to the end[LE])
+   */
+  abstract writeUint8ArrayBackwards(
+    value: Uint8Array
+  ): MaybePromise<void, IsAsync>;
+  /**
+   * Push a byte (numbers 0-255) to the buffer's end
+   * @param value the byte to push
+   */
+  abstract push(value: number): MaybePromise<void, IsAsync>;
+  /**
+   * Write a writeable buffer storing data to the buffer
    */
   writeWriteableBuffer(value: writableBufferStorage) {
-    return this.write(Array.prototype.slice.call(value.buffer, 0));
+    return this.writeUint8Array(value.buffer);
   }
   // Little-endian support: <-
   /**
    * Write data to the buffer (writes data that was origionaly in BE format to the endianness of the buffer)
    * @param value The data to write
    */
-  writeEndian: cloneFunc<typeof this.write | typeof this.writeBackwards> =
-    this.write;
+  writeArrayEndian:
+    | cloneFunc<typeof this.writeArray>
+    | cloneFunc<typeof this.writeArrayBackwards> = this.writeArray;
   /**
    * Write data to the buffer backwards (writes data that was origionaly in LE format to the endianness of the buffer, I know that "backwards" is a little opinionated but the class was origionaly BE-only and I did not want to change too mutch)
    * @param value The data to write
    */
-  writeBackwardsEndian: cloneFunc<
-    typeof this.write | typeof this.writeBackwards
-  > = this.writeBackwards;
+  writeArrayBackwardsEndian:
+    | cloneFunc<typeof this.writeArray>
+    | cloneFunc<typeof this.writeArrayBackwards> = this.writeArrayBackwards;
   /**
    * Write a Uint8Array to the buffer (for the endian)
    * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
    */
-  writeUint8ArrayEndian: cloneFunc<
-    typeof this.write | typeof this.writeBackwards
-  > = this.write;
+  writeUint8ArrayEndian:
+    | cloneFunc<typeof this.writeUint8Array>
+    | cloneFunc<typeof this.writeUint8ArrayBackwards> = this.writeUint8Array;
+  /**
+   * Write a Uint8Array to the buffer backwars (for the endian)
+   * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
+   */
+  writeUint8ArrayBackwardsEndian:
+    | cloneFunc<typeof this.writeUint8Array>
+    | cloneFunc<typeof this.writeUint8ArrayBackwards> =
+    this.writeUint8ArrayBackwards;
   #isLe = false;
   /**
    * If the buffer is little endian
@@ -80,13 +96,15 @@ export abstract class writableBufferBase {
    */
   set isLe(isLe: boolean) {
     if (isLe) {
-      this.writeEndian = this.writeBackwards;
-      this.writeBackwardsEndian = this.write;
-      this.writeUint8ArrayEndian = this.writeBackwards;
+      this.writeArrayEndian = this.writeArrayBackwards;
+      this.writeArrayBackwardsEndian = this.writeArray;
+      this.writeUint8ArrayEndian = this.writeUint8ArrayBackwards;
+      this.writeUint8ArrayBackwardsEndian = this.writeUint8Array;
     } else {
-      this.writeEndian = this.write;
-      this.writeBackwardsEndian = this.writeBackwards;
-      this.writeUint8ArrayEndian = this.write;
+      this.writeArrayEndian = this.writeArray;
+      this.writeArrayBackwardsEndian = this.writeArrayBackwards;
+      this.writeUint8ArrayEndian = this.writeUint8Array;
+      this.writeUint8ArrayBackwardsEndian = this.writeUint8ArrayBackwards;
     }
     this.#isLe = isLe;
   }
@@ -108,7 +126,7 @@ export abstract class writableBufferBase {
       out.unshift((mask & value) >>> i);
       mask <<= 8;
     }
-    return wrapForPromise(this.writeEndian(out), bytes);
+    return wrapForPromise(this.writeArrayEndian(out), bytes);
   }
   /**
    * Write an unsigned integer to the buffer
@@ -125,7 +143,7 @@ export abstract class writableBufferBase {
       out.unshift(Number((mask & value) >> i));
       mask <<= 8n;
     }
-    return wrapForPromise(this.writeEndian(out), bytes);
+    return wrapForPromise(this.writeArrayEndian(out), bytes);
   }
   /**
    * Write a twos complement to the buffer
@@ -187,11 +205,11 @@ export abstract class writableBufferBase {
     float32Array[0] = value;
     // Typed arrays are endian-dependent, so if the computer is little-endian, the output will be in little-endian format
     if (isBigEndian) {
-      return wrapForPromise(void 0, this.writeEndian(uint8Float32ArrayView));
+      return wrapForPromise(void 0, this.writeUint8ArrayEndian(uint8Float32ArrayView));
     } else {
       return wrapForPromise(
         void 0,
-        this.writeBackwardsEndian(uint8Float32ArrayView)
+        this.writeUint8ArrayBackwardsEndian(uint8Float32ArrayView)
       );
     }
   }
@@ -202,11 +220,11 @@ export abstract class writableBufferBase {
   writeDouble(value: number) {
     float64Array[0] = value;
     if (isBigEndian) {
-      return wrapForPromise(void 0, this.writeEndian(uint8Float64ArrayView));
+      return wrapForPromise(void 0, this.writeUint8ArrayEndian(uint8Float64ArrayView));
     } else {
       return wrapForPromise(
         void 0,
-        this.writeBackwardsEndian(uint8Float64ArrayView)
+        this.writeUint8ArrayBackwardsEndian(uint8Float64ArrayView)
       );
     }
   }
@@ -217,13 +235,13 @@ export abstract class writableBufferBase {
    * @returns How many bytes were written
    */
   writeString(value: string, mutf8: boolean = false) {
-    let encoded: uint8ArrayLike;
+    let encoded: Uint8Array;
     if (mutf8 === true) {
       encoded = encodeMutf8(value);
     } else {
       encoded = encodeUtf8(value);
     }
-    return wrapForPromise(this.write(encoded), encoded.length);
+    return wrapForPromise(this.writeUint8Array(encoded), encoded.length);
   }
   /**
    * Encode and write a signed one's complement
@@ -231,10 +249,7 @@ export abstract class writableBufferBase {
    * @param bytes How many bytes to make the encoded value
    * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeSignedOnesComplement(
-    value: number,
-    bytes?: number
-  ) {
+  writeSignedOnesComplement(value: number, bytes?: number) {
     bytes ||= Math.ceil((33 - Math.clz32(Math.abs(value))) / 8);
     return wrapForPromise(
       this.writeUnsignedInt(
@@ -253,10 +268,7 @@ export abstract class writableBufferBase {
    * @param bytes How many bytes to make the encoded value
    * @returns How many bytes were written (Same as bytes parameter)
    */
-  writeSignedOnesComplementBigint(
-    value: bigint,
-    bytes: number
-  ) {
+  writeSignedOnesComplementBigint(value: bigint, bytes: number) {
     return wrapForPromise(
       this.writeUnsignedIntBigint(
         value < 0n
@@ -366,90 +378,19 @@ export declare abstract class writableBufferStorage extends writableBufferBase {
    */
   abstract get length(): number;
 }
-export class writableBufferResize
-  extends writableBufferBase
-  implements writableBufferStorage
-{
-  #buffer: Uint8Array;
-  get buffer(): Uint8Array {
-    return this.#buffer.slice(0);
-  }
-  /**
-   * Change the buffer of exsisting data.
-   * If a Uint8Array (or buffer) is pased, and it is not resizeable, it copys the bytes of the buffer
-   */
-  set buffer(newValue: uint8ArrayLike | writableBufferStorage) {
-    if (newValue instanceof writableBufferResize) {
-      this.#buffer = newValue.#buffer;
-    } else {
-      const buffer =
-        newValue instanceof writableBufferBase ? newValue.buffer : newValue;
-      // @ts-ignore
-      this.#buffer.buffer.resize(buffer.length);
-      for (let index = 0; index < buffer.length; index++) {
-        this.#buffer[index] = buffer[index];
-      }
-    }
-  }
-  get length() {
-    return this.#buffer.length;
-  }
-  /**
-   * Create a writable buffer that operates via resizing the Uint8Array's ArrayBuffer
-   * @param maxLength The max length of the buffer
-   */
-  constructor(maxLength?: number) {
-    super();
-    // A max of .5 megabytes
-    // Wow typescript does not have types for es2024 yet?
-    this.#buffer = new Uint8Array(
-      // @ts-ignore
-      new ArrayBuffer(0, { maxByteLength: maxLength ?? 500000 })
-    );
-  }
-  #resize(bytes: number): void {
-    // @ts-ignore
-    this.#buffer.buffer.resize(this.#buffer.buffer.byteLength + bytes);
-  }
-  push(value: number): void {
-    this.#resize(1);
-    this.#buffer[this.#buffer.length - 1] = value;
-  }
-  write(value: uint8ArrayLike): void {
-    this.#resize(value.length);
-    const valueLengthPlueOne = value.length + 1;
-    for (let i = 1; i < valueLengthPlueOne; i++) {
-      this.#buffer[this.#buffer.length - i] = value[value.length - i];
-    }
-  }
-  writeBackwards(value: uint8ArrayLike): void {
-    this.#resize(value.length);
-    const bufferLength = this.#buffer.length - 1;
-    for (let i = 0; i < value.length; i++) {
-      this.#buffer[bufferLength - i] = value[i];
-    }
-  }
-  writeWriteableBuffer(value: writableBufferResize): void {
-    this.write(Array.prototype.slice.call(value.buffer, 0));
-  }
-}
-export const writableBufferResizeLE = addDefaultEndianness(
-  writableBufferResize,
-  true
-);
-export class writableBufferChunkArray
-  extends writableBufferBase
+export class writableBuffer
+  extends writableBufferBase<false>
   implements writableBufferStorage
 {
   #chunkSize: number;
   #buffers: Uint8Array[];
   #used: number = 0;
   get buffer(): Uint8Array {
-    return joinUint8Arrays(this.#buffers,this.length);
+    return joinUint8Arrays([...this.#buffers.slice(0,-1),this.#buffers[this.#buffers.length-1].subarray(0,this.#used)], this.length);
   }
   set buffer(value: uint8ArrayLike | writableBufferStorage) {
     if (
-      value instanceof writableBufferChunkArray &&
+      value instanceof writableBuffer &&
       value.#chunkSize === this.#chunkSize
     ) {
       this.#buffers = value.#buffers;
@@ -457,7 +398,15 @@ export class writableBufferChunkArray
     } else {
       this.#buffers = [new Uint8Array(this.#chunkSize)];
       this.#used = 0;
-      this.write(value instanceof writableBufferBase ? value.buffer : value);
+      if (value instanceof writableBufferBase){
+        // Processing goes into getting this value, so don't grab it twice
+        const buffer = value.buffer;
+        if (buffer instanceof Uint8Array) {
+          this.writeUint8Array(buffer);
+          return
+        }
+      }
+      this.writeUint8Array(value instanceof Uint8Array ? value : new Uint8Array(value as uint8ArrayLike));
     }
   }
   get length() {
@@ -477,20 +426,51 @@ export class writableBufferChunkArray
     }
     this.#buffers[0][this.#used++] = value;
   }
-  write(value: uint8ArrayLike) {
-    for (let index = 0; index < value.length; index++) {
-      this.push(value[index]);
+  writeUint8Array(value: Uint8Array): void {
+    let bytesLeft = value.length;
+    let index = 0;
+    while (bytesLeft > 0) {
+      if (this.#used === this.#chunkSize) {
+        this.#used = 0;
+        this.#buffers.unshift(new Uint8Array(this.#chunkSize));
+      }
+      const bytesToWrite = Math.min(
+        bytesLeft,
+        this.#chunkSize - this.#used
+      );
+      this.#buffers[0].set(value.subarray(index, index + bytesToWrite), this.#used);
+      this.#used += bytesToWrite;
+      index += bytesToWrite;
+      bytesLeft -= bytesToWrite;
     }
   }
-  writeBackwards(value: uint8ArrayLike) {
-    for (let index = value.length - 1; index >= 0; index--) {
-      this.push(value[index]);
+  writeUint8ArrayBackwards(value: Uint8Array): void {
+    // Don't mutate the origional value
+    this.writeUint8Array(value.slice(0).reverse());
+  }
+  writeArray(value: number[]) {
+    let bytesLeft = value.length;
+    let index = 0;
+    while (bytesLeft > 0) {
+      if (this.#used === this.#chunkSize) {
+        this.#used = 0;
+        this.#buffers.unshift(new Uint8Array(this.#chunkSize));
+      }
+      const bytesToWrite = Math.min(
+        bytesLeft,
+        this.#chunkSize - this.#used
+      );
+      this.#buffers[0].set(value.slice(index, index + bytesToWrite), this.#used);
+      this.#used += bytesToWrite;
+      index += bytesToWrite;
+      bytesLeft -= bytesToWrite;
     }
+  }
+  writeArrayBackwards(value: number[]) {
+    this.writeArray(value.slice(0).reverse());
   }
 }
-export const writableBufferChunkArrayLE = addDefaultEndianness(
-  writableBufferChunkArray,
+export const writableBufferLE = addDefaultEndianness(
+  writableBuffer,
   true
 );
-export const writableBuffer = writableBufferChunkArray;
-export const writableBufferLE = writableBufferChunkArrayLE;
