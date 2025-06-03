@@ -9,10 +9,7 @@ import {
   maybePromiseThen,
   maybeAsyncCallArr,
 } from "./common";
-import type {
-  cloneFunc,
-  MaybePromise,
-} from "./types";
+import type { cloneFunc, MaybePromise } from "./types";
 const constants = {
   // 11111111111111111111111111111111
   allOnes: 0xffffffff,
@@ -45,9 +42,12 @@ export abstract class readableBufferBase<
    * Read a ReadableBuffer from the start of the buffer
    * @param bytes How many bytes to read
    */
-  abstract readReadableBuffer(
-    bytes: number
-  ): MaybePromise<readableBuffer, IsAsync>;
+  readReadableBuffer(bytes: number) {
+    return maybePromiseThen(
+      this.readUint8Array(bytes),
+      (read) => new readableBuffer(read)
+    );
+  }
   /**
    * Read a number array (0-255) from the start of the buffer
    * @param bytes How many bytes to read
@@ -405,10 +405,10 @@ export class readableBuffer extends readableBufferBase<false> {
     return this.#buffer[this.#index++];
   }
   readUint8Array(bytes: number): Uint8Array {
-    if (this.#buffer.length < (this.#index + bytes)) {
+    if (this.#buffer.length < this.#index + bytes) {
       throw new RangeError("readableBuffer out of bounds");
     }
-    return this.#buffer.subarray(this.#index, this.#index += bytes);
+    return this.#buffer.subarray(this.#index, (this.#index += bytes));
   }
   readUint8ArrayBackwards(bytes: number): Uint8Array<ArrayBufferLike> {
     return this.readUint8Array(bytes).reverse();
