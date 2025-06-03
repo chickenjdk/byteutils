@@ -1,2 +1,2 @@
-export {readableStream} from "./readableStream";
-export {writableStream} from "./writableStream";
+export * from "./readableStream";
+export * from "./writableStream";
