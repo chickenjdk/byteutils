@@ -8,6 +8,13 @@ float32Array[0] = 2;
 export const isBigEndian = uint8Float32ArrayView[0] === 64;
 // Common helpers
 // Binary helpers
+/**
+ * Join uint8arrays together
+ * @param arrays The uint8arrays to join
+ * @param totalLength The total legth of the arrays. Please provide if known as an optimization.
+ * If not provided, it will be calculated by summing the lengths of the arrays.
+ * @returns The joined uint8array
+ */
 export function joinUint8Arrays(
   arrays: Uint8Array[],
   totalLength?: number
@@ -91,7 +98,13 @@ export function wrapForAsyncCallArr<
   // @ts-ignore
   return value;
 }
-
+/**
+ * A funtion to help with processing values that may or may not be promises
+ * @param maybePromise The value that may or may not be a promise
+ * @param callback The callback to call with the value returned when the promise is resolved or when the value is returned directly.
+ * @returns Whet the callback returns, if the input is a promise, it will return a promise that resolves to the value returned by the callback.
+ * If the input is not a promise, it will return the value returned by the callback directly.
+ */
 export function maybePromiseThen<maybePromise, returnType>(
   maybePromise: maybePromise,
   callback: (
@@ -108,7 +121,13 @@ export function maybePromiseThen<maybePromise, returnType>(
     return callback(maybePromise);
   }
 }
-
+/**
+ * Call a function that may or may not return a promise for each set of parameters, if any of the calls return a promise, it will return a promise that resolves to an array of the results.
+ * If all calls return values directly, it will return an array of the results directly.
+ * @param maybeAsyncFunc A function that may or may not return a promise
+ * @param params The array of parameters to call the function with
+ * @returns The results of the calls, either as an array of values or a promise that resolves to an array of values. See main description.
+ */
 export function maybeAsyncCallArr<args extends unknown[], ret>(
   maybeAsyncFunc: (...args: args) => ret,
   params: args[]
