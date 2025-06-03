@@ -7,6 +7,21 @@ export const uint8Float64ArrayView = new Uint8Array(float64Array.buffer);
 float32Array[0] = 2;
 export const isBigEndian = uint8Float32ArrayView[0] === 64;
 // Common helpers
+// Binary helpers
+export function joinUint8Arrays(
+  arrays: Uint8Array[],
+  totalLength?: number
+): Uint8Array {
+  totalLength ??= arrays.reduce((acc, arr) => acc + arr.length, 0);
+  const joined = new Uint8Array(totalLength);
+  let index = 0;
+  for (const buffer of arrays) {
+    joined.set(buffer, index);
+    index += buffer.length;
+  }
+  return joined;
+}
+// Misc helpers
 /**
  * Extend the provided readable/writable buffer to set a default endianness
  * @param buffer The buffer to extend
@@ -28,6 +43,7 @@ export function addDefaultEndianness<
     }
   };
 }
+// Promise helpers
 /**
  * Wrap a value for the completion of a promise
  * @param awaiter The value to await (may not actualy be a promise, if not returns value with no wrappping)
@@ -93,7 +109,10 @@ export function maybePromiseThen<maybePromise, returnType>(
   }
 }
 
-export function maybeAsyncCallArr<args extends unknown[], ret>(maybeAsyncFunc: (...args:args) => ret, params: args[]): ret extends Promise<unknown> ? Promise<AwaitedUnion<ret>[]> : ret[]{
+export function maybeAsyncCallArr<args extends unknown[], ret>(
+  maybeAsyncFunc: (...args: args) => ret,
+  params: args[]
+): ret extends Promise<unknown> ? Promise<AwaitedUnion<ret>[]> : ret[] {
   const outputs: ret[] = [];
   for (let index = 0; index < params.length; index++) {
     const output = maybeAsyncFunc(...params[index]);

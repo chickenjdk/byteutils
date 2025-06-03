@@ -1,5 +1,6 @@
 import { encodeMutf8, encodeUtf8 } from "./utf8tools";
 import {
+  joinUint8Arrays,
   addDefaultEndianness,
   float32Array,
   float64Array,
@@ -18,6 +19,7 @@ const constants = {
   // 11111111111111111111111100000000
   allOnesButLastByte: 0xffffff00,
 };
+// Returns not typed for non-abstract/abstracet alias methods
 export abstract class writableBufferBase {
   // Methods to implement
   /**
@@ -42,8 +44,8 @@ export abstract class writableBufferBase {
   /**
    * White a writeable buffer storing data to the buffer
    */
-  writeWriteableBuffer(value: writableBufferStorage): void | Promise<void> {
-    this.write(Array.prototype.slice.call(value.buffer, 0));
+  writeWriteableBuffer(value: writableBufferStorage) {
+    return this.write(Array.prototype.slice.call(value.buffer, 0));
   }
   // Little-endian support: <-
   /**
@@ -197,7 +199,7 @@ export abstract class writableBufferBase {
    * Write a double float to the buffer
    * @param value The double float to write
    */
-  writeDouble(value: number): void | Promise<void> {
+  writeDouble(value: number) {
     float64Array[0] = value;
     if (isBigEndian) {
       return wrapForPromise(void 0, this.writeEndian(uint8Float64ArrayView));
@@ -214,7 +216,7 @@ export abstract class writableBufferBase {
    * @param mutf8 If true, write in java's mutf8 format instead
    * @returns How many bytes were written
    */
-  writeString(value: string, mutf8: boolean = false): number | Promise<number> {
+  writeString(value: string, mutf8: boolean = false) {
     let encoded: uint8ArrayLike;
     if (mutf8 === true) {
       encoded = encodeMutf8(value);
@@ -232,7 +234,7 @@ export abstract class writableBufferBase {
   writeSignedOnesComplement(
     value: number,
     bytes?: number
-  ): number | Promise<number> {
+  ) {
     bytes ||= Math.ceil((33 - Math.clz32(Math.abs(value))) / 8);
     return wrapForPromise(
       this.writeUnsignedInt(
@@ -254,7 +256,7 @@ export abstract class writableBufferBase {
   writeSignedOnesComplementBigint(
     value: bigint,
     bytes: number
-  ): number | Promise<number> {
+  ) {
     return wrapForPromise(
       this.writeUnsignedIntBigint(
         value < 0n
@@ -443,13 +445,7 @@ export class writableBufferChunkArray
   #buffers: Uint8Array[];
   #used: number = 0;
   get buffer(): Uint8Array {
-    return this.#buffers.reduce((joined, newBuff, index) => {
-      joined.set(
-        index === 0 ? newBuff.slice(0, this.#used) : newBuff,
-        (this.#buffers.length - 1 - index) * this.#chunkSize
-      );
-      return joined;
-    }, new Uint8Array(this.length));
+    return joinUint8Arrays(this.#buffers,this.length);
   }
   set buffer(value: uint8ArrayLike | writableBufferStorage) {
     if (

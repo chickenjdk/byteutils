@@ -9,7 +9,10 @@ import {
   maybePromiseThen,
   maybeAsyncCallArr,
 } from "./common";
-import type { asyncify, cloneFunc } from "./types";
+import type {
+  cloneFunc,
+  MaybePromise,
+} from "./types";
 const constants = {
   // 11111111111111111111111111111111
   allOnes: 0xffffffff,
@@ -18,51 +21,100 @@ const constants = {
   // 11111111111111111111111100000000
   allOnesButLastByte: 0xffffff00,
 };
-export abstract class readableBufferBase {
+export abstract class readableBufferBase<
+  IsAsync extends boolean = true | false
+> {
   // Methods to implement
   /**
    * Read from the start of the buffer
    */
-  abstract shift(): number | Promise<number>;
+  abstract shift(): MaybePromise<number, IsAsync>;
   /**
    * Read a Uint8Array from the start of the buffer
    * @param bytes How many bytes to read
    */
-  abstract readUint8Array(bytes: number): Uint8Array | Promise<Uint8Array>;
+  abstract readUint8Array(bytes: number): MaybePromise<Uint8Array, IsAsync>;
+  /**
+   * Read a Uint8Array from the start of the buffer backwards
+   * @param bytes How many bytes to read
+   */
+  abstract readUint8ArrayBackwards(
+    bytes: number
+  ): MaybePromise<Uint8Array, IsAsync>;
   /**
    * Read a ReadableBuffer from the start of the buffer
    * @param bytes How many bytes to read
    */
   abstract readReadableBuffer(
     bytes: number
-  ): readableBuffer | Promise<readableBuffer>;
+  ): MaybePromise<readableBuffer, IsAsync>;
   /**
    * Read a number array (0-255) from the start of the buffer
    * @param bytes How many bytes to read
    */
-  abstract read(bytes: number): number[] | Promise<number[]>;
+  abstract readArray(bytes: number): MaybePromise<number[], IsAsync>;
   /**
    * Read a number array (0-255) from the start of the buffer backwards
    * @param bytes How many bytes to read
    */
-  abstract readBackwards(bytes: number): number[] | Promise<number[]>;
+  abstract readArrayBackwards(bytes: number): MaybePromise<number[], IsAsync>;
+  /**
+   * Read a array OR Uint8Array from the start of the buffer
+   * @param bytes How many bytes to read
+   */
+  read:
+    | cloneFunc<typeof this.readArray>
+    | cloneFunc<typeof this.readUint8Array> = this.readUint8Array;
+  /**
+   * Read a array OR Uint8Array from the start of the buffer backwards
+   * @param bytes How many bytes to read
+   */
+  readBackwards:
+    | cloneFunc<typeof this.readArrayBackwards>
+    | cloneFunc<typeof this.readUint8ArrayBackwards> =
+    this.readUint8ArrayBackwards;
   // "real" code
   // Little-endian support: <-
   /**
    * Read a Uint8Array from the start of the buffer (endian-dependent)
    */
-  readUint8ArrayEndian = this.readUint8Array;
+  readUint8ArrayEndian:
+    | cloneFunc<typeof this.readUint8Array>
+    | cloneFunc<typeof this.readUint8ArrayBackwards> = this.readUint8Array;
+  /**
+   * Read a Uint8Array from the start of the buffer backwards (endian-dependent)
+   */
+  readUint8ArrayBackwardsEndian:
+    | cloneFunc<typeof this.readUint8Array>
+    | cloneFunc<typeof this.readUint8ArrayBackwards> =
+    this.readUint8ArrayBackwards;
   /**
    * Read a number array (0-255) from the start of the buffer (endian-dependent)
-   * @param value The data to write
+   * @param bytes How many bytes to read
    */
-  readEndian: cloneFunc<typeof this.read | typeof this.readBackwards> =
-    this.read;
+  readArrayEndian:
+    | cloneFunc<typeof this.readArray>
+    | cloneFunc<typeof this.readArrayBackwards> = this.readArray;
   /**
    * Read a number array (0-255) from the start of the buffer backwards (endian-dependent)
+   * @param bytes How many bytes to read
    */
-  readBackwardsEndian: cloneFunc<typeof this.read | typeof this.readBackwards> =
-    this.readBackwards;
+  readArrayBackwardsEndian:
+    | cloneFunc<typeof this.readArray>
+    | cloneFunc<typeof this.readArrayBackwards> = this.readArrayBackwards;
+  /**
+   * Read a array-like (May be a array or uint8array but don't count on it) from the start of the buffer (endian-dependent)
+   * @param value The data to write
+   */
+  readEndian:
+    | cloneFunc<typeof this.read>
+    | cloneFunc<typeof this.readBackwards> = this.read;
+  /**
+   * Read a array-like (May be a array or uint8array but don't count on it) from the start of the buffer backwards (endian-dependent)
+   */
+  readBackwardsEndian:
+    | cloneFunc<typeof this.read>
+    | cloneFunc<typeof this.readBackwards> = this.readBackwards;
   #isLe = false;
   /**
    * If the buffer is little endian
@@ -77,10 +129,7 @@ export abstract class readableBufferBase {
     if (isLe) {
       this.readEndian = this.readBackwards;
       this.readBackwardsEndian = this.read;
-      this.readUint8ArrayEndian = (...args) =>
-        maybePromiseThen(this.readUint8Array(...args), (read) =>
-          read.reverse()
-        );
+      this.readUint8ArrayEndian = this.readUint8ArrayBackwards;
     } else {
       this.readEndian = this.read;
       this.readBackwardsEndian = this.readBackwards;
@@ -95,13 +144,14 @@ export abstract class readableBufferBase {
    * @returns The parsed unsigned integer
    */
   readUnsignedInt(bytes: number) {
-    return maybePromiseThen(
-      this.readEndian(bytes),
-      (read) =>
-        read.reverse().reduce(function (creating, byte, index): number {
-          return creating | (byte << (index * 8));
-        }, 0) >>> 0
-    );
+    return maybePromiseThen(this.readEndian(bytes), (read) => {
+      let output = 0;
+      let index = 0;
+      for (const byte of read.reverse()) {
+        output |= byte << (index++ * 8);
+      }
+      return output >>> 0; // Force unsigned
+    });
   }
   /**
    * Read a unsigned integer as a bigint
@@ -234,7 +284,7 @@ export abstract class readableBufferBase {
    */
   readSignedOnesComplementBigint(bytes: number) {
     const bits = BigInt(bytes * 8);
-    return maybePromiseThen(this.readUnsignedIntBigint(bytes), (read) =>
+    return maybePromiseThen(this.readUnsignedIntBigint(bytes), (read: bigint) =>
       (read & (1n << (bits - 1n))) !== 0n
         ? -(~read & ~(-1n << (bits - 1n)))
         : read
@@ -307,9 +357,9 @@ export abstract class readableBufferBase {
   }
 }
 
-export const readableBufferBaseAsync = readableBufferBase;
+export const readableBufferBaseAsync = readableBufferBase<true>;
 
-export class readableBuffer extends readableBufferBase {
+export class readableBuffer extends readableBufferBase<false> {
   #buffer: Uint8Array;
   #index: number = 0;
   constructor(data: Uint8Array | readableBuffer) {
@@ -333,25 +383,46 @@ export class readableBuffer extends readableBufferBase {
       this.#index = 0;
     }
   }
+  /**
+   * The current offset in the buffer
+   * @returns The current offset in the buffer
+   */
   get _offset() {
     return this.#index;
   }
+  /**
+   * The remaining length of the buffer
+   * @returns The length of the buffer
+   */
+  get length(): number {
+    return this.#buffer.length - this.#index;
+  }
   shift(): number {
-    if (this.#buffer.length < ++this.#index) {
+    // If the index is the same or bigger than the length, the buffer will be out of bounds be out of bounds because the length is always one bigger then the highest index
+    if (this.#buffer.length <= this.#index) {
       throw new RangeError("readableBuffer out of bounds");
     }
-    return this.#buffer[this.#index - 1];
+    return this.#buffer[this.#index++];
   }
   readUint8Array(bytes: number): Uint8Array {
-    return this.#buffer.slice(this.#index, (this.#index += bytes));
+    if (this.#buffer.length < (this.#index + bytes)) {
+      throw new RangeError("readableBuffer out of bounds");
+    }
+    return this.#buffer.subarray(this.#index, this.#index += bytes);
+  }
+  readUint8ArrayBackwards(bytes: number): Uint8Array<ArrayBufferLike> {
+    return this.readUint8Array(bytes).reverse();
   }
   readReadableBuffer(bytes: number): readableBuffer {
+    if (this.#buffer.length < this.#index + bytes) {
+      throw new RangeError("readableBuffer out of bounds");
+    }
     // This uses the same memory for the new readableBuffer
     return new readableBuffer(
       this.#buffer.subarray(this.#index, (this.#index += bytes))
     );
   }
-  read(bytes: number): number[] {
+  readArray(bytes: number): number[] {
     const output = Array.prototype.slice.call(
       this.#buffer,
       this.#index,
@@ -363,8 +434,8 @@ export class readableBuffer extends readableBufferBase {
     return output;
   }
   // This is a bit more usefull in writableBuffer
-  readBackwards(bytes: number): number[] {
-    return this.read(bytes).reverse();
+  readArrayBackwards(bytes: number): number[] {
+    return this.readArray(bytes).reverse();
   }
 }
 export const readableBufferLe = addDefaultEndianness(readableBuffer, true);

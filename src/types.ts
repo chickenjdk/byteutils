@@ -14,3 +14,4 @@ export type topLevelUnionArray<Array extends any[]> = Array extends [infer First
 export type json = {[key in string | number]:(string|number|json)[] | string | number | json};
 export type cloneFunc<T> = T extends (...args:infer A) => infer R ? (...args:A) => R : never;
 export type AwaitedUnion<T> = T extends Promise<infer U> ? AwaitedUnion<U> : T;
+export type MaybePromise<T, IsAsync extends Boolean = true | false> = IsAsync extends false ? T : Promise<T>;
