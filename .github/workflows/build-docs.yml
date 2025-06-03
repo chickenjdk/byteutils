@@ -1,4 +1,4 @@
-name: Release: Deploy Docs & Publish
+name: Deploy Docs & Publish
 
 on:
   release:
@@ -37,8 +37,10 @@ jobs:
           pkg.version = process.env.VERSION.startsWith('v') ? process.env.VERSION.slice(1) : process.env.VERSION;
           fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
+
       - name: Build
         run: npm run build
+
       - name: Update README.md docs URL
         run: |
           sed -i "s|https://chickenjdk.github.io/byteutils/docs/.*|https://chickenjdk.github.io/byteutils/docs/${{ env.VERSION }}|g" README.md
@@ -64,7 +66,7 @@ jobs:
 
       - name: Rm docs directory
         run: rm -rf docs
-        
+
       - name: Publish to npm
         run: npm publish --access public
         env:
