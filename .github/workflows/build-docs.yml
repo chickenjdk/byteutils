@@ -43,7 +43,7 @@ jobs:
 
       - name: Update README.md docs URL
         run: |
-          sed -i "s|https://chickenjdk.github.io/byteutils/docs/.*|https://chickenjdk.github.io/byteutils/docs/${{ env.VERSION }}|g" README.md
+          sed -i "s|https://chickenjdk.github.io/byteutils/docs/[^\)]*|https://chickenjdk.github.io/byteutils/docs/${{ env.VERSION }}|g" README.md
 
       - name: Commit updated version + docs link
         run: |
