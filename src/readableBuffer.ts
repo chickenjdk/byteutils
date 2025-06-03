@@ -292,7 +292,6 @@ export abstract class readableBufferBase<
   }
   /**
    * Parse a signed one's complement from a byte
-   * @param bytes How long the signed one's complement is
    * @returns The parsed signed one's compement
    */
   readSignedOnesComplementByte() {
