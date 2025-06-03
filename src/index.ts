@@ -1,3 +1,4 @@
 export * from "./readableBuffer";
 export * from "./writableBuffer";
-export {addDefaultEndianness} from "./common";
+export * from "./stream";
+export { addDefaultEndianness } from "./common";
