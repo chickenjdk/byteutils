@@ -109,18 +109,31 @@ export abstract class writableBufferBase<
     this.#isLe = isLe;
   }
   // ->
-  // REMEMBER: return type is not specifyed so if writeEndian or whatever is not async, promise will hopefully be removed from the return type via wrapForPromise dynamic return type
+  // REMEMBER: return type is not specifyed so the isasync param properly propigates
+  /**
+   * Calculate the minimum length of an unsigned integer in bytes.
+   * WARNING: No unssigned ints above 4294967295 (2^32 - 1) are supported, so this will not work for those.
+   * This is due to the limitations of bitwise operators. You can write numbers higher than that via writeUnsignedIntBigint, but this function will not work for them.
+   * @remarks
+   * This function calculates the minimum number of bytes needed to represent an unsigned integer in binary format.
+   * It uses the `Math.clz32` function to count the number of leading zeros in the binary representation of the value.
+   * The result is rounded up to the nearest byte.
+   * @param value The value to check
+   * @returns The calculated minimum length in bytes
+   */
+  minLengthOfUnsignedInt(value: number) {
+    return Math.ceil((32 - Math.clz32(value)) / 8);
+  }
   /**
    * Write an unsigned integer to the buffer
    * @param value The unsigned int to write
    * @param bytes How many bytes the unsined int is (If not provided, it will write the minimum length)
    * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeUnsignedInt(value: number, bytes?: number) {
+  writeUnsignedInt(value: number, bytes: number) {
     let mask = 0b11111111;
     let out: number[] = [];
     let i = -8;
-    bytes ||= Math.ceil((32 - Math.clz32(value)) / 8);
     const bits = bytes * 8;
     while ((i += 8) < bits) {
       out.unshift((mask & value) >>> i);
@@ -146,14 +159,29 @@ export abstract class writableBufferBase<
     return wrapForPromise(this.writeArrayEndian(out), bytes);
   }
   /**
+   * Calculate the minimum length of a two's complement in bytes.
+   * WARNING: No two's complements above 4278190079 or below -4278190079 (2^31 - 1) are supported, so this will not work for those.
+   * This is due to the limitations of bitwise operators. You can write numbers higher than that via writeTwosComplementBigint, but this function will not work for them.
+   * @remarks
+   * This function calculates the minimum number of bytes needed to represent an two's complement in binary format.
+   * It uses the `Math.clz32` function to count the number of leading zeros in the binary representation of the value.
+   * It subtracts this from 33 (equivilent to the number of bits in the two's complement +1 to account for the sign) to get the number of bits needed.
+   * The result is rounded up to the nearest byte.
+   * @param value The value to check
+   * @returns The calculated minimum length in bytes
+   */
+  minLengthOfTwosComplement(value: number) {
+    // Length of the number as a unsigned int+1 is the bytes (to take into account the sign bit)
+    // This is then converted to bytes
+    return Math.ceil((33 - Math.clz32(Math.abs(value))) / 8);
+  }
+  /**
    * Write a twos complement to the buffer
    * @param value The number to encode
    * @param bytes How long the twos complement to be written is in bytes
    * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeTwosComplement(value: number, bytes?: number) {
-    const bitsLength = 32 - Math.clz32(Math.abs(value));
-    bytes ||= Math.ceil((bitsLength + 1) / 8);
+  writeTwosComplement(value: number, bytes: number) {
     return wrapForPromise(
       this.writeUnsignedInt(
         value < 0
@@ -182,33 +210,39 @@ export abstract class writableBufferBase<
   /**
    * Write a twos complement to the buffer (one byte)
    * @param value The number to encode
+   * @returns How many bytes were written (1)
    */
   writeTwosComplementByte(value: number) {
-    return wrapForPromise(void 0, this.push((value & 0b11111111) >>> 0));
+    return wrapForPromise(1, this.push((value & 0b11111111) >>> 0));
   }
   /**
    * Write twos complements to the buffer (one byte each)
    * @param values The numbers to encode
+   * @returns How many bytes were written (Same as values.length)
    */
   writeTwosComplementByteArray(values: number[]) {
     return wrapForAsyncCallArr(
       this.writeTwosComplementByte.bind(this),
       values.map((value) => [value]),
-      void 0
+      values.length
     );
   }
   /**
    * Write a float to the buffer
    * @param value The float to write
+   * @returns How many bytes were written (4)
    */
   writeFloat(value: number) {
     float32Array[0] = value;
     // Typed arrays are endian-dependent, so if the computer is little-endian, the output will be in little-endian format
     if (isBigEndian) {
-      return wrapForPromise(void 0, this.writeUint8ArrayEndian(uint8Float32ArrayView));
+      return wrapForPromise(
+        4,
+        this.writeUint8ArrayEndian(uint8Float32ArrayView)
+      );
     } else {
       return wrapForPromise(
-        void 0,
+        4,
         this.writeUint8ArrayBackwardsEndian(uint8Float32ArrayView)
       );
     }
@@ -216,14 +250,18 @@ export abstract class writableBufferBase<
   /**
    * Write a double float to the buffer
    * @param value The double float to write
+   * @returns How many bytes were written (8)
    */
   writeDouble(value: number) {
     float64Array[0] = value;
     if (isBigEndian) {
-      return wrapForPromise(void 0, this.writeUint8ArrayEndian(uint8Float64ArrayView));
+      return wrapForPromise(
+        8,
+        this.writeUint8ArrayEndian(uint8Float64ArrayView)
+      );
     } else {
       return wrapForPromise(
-        void 0,
+        8,
         this.writeUint8ArrayBackwardsEndian(uint8Float64ArrayView)
       );
     }
@@ -231,7 +269,7 @@ export abstract class writableBufferBase<
   /**
    * Write a utf8 string to the buffer
    * @param value
-   * @param mutf8 If true, write in java's mutf8 format instead
+   * @param mutf8 If true, write in java's mutf8 format instead. This was build for parsing java's .class files, so no complaining about it being a java-specific format.
    * @returns How many bytes were written
    */
   writeString(value: string, mutf8: boolean = false) {
@@ -244,13 +282,29 @@ export abstract class writableBufferBase<
     return wrapForPromise(this.writeUint8Array(encoded), encoded.length);
   }
   /**
+   * Calculate the minimum length of a signed ones's complement in bytes.
+   * WARNING: No signed two's complements above 4278190079 or below -4278190079 (2^31 - 1) are supported, so this will not work for those.
+   * This is due to the limitations of bitwise operators. You can write numbers higher than that via writeSignedOnesComplementBigint, but this function will not work for them.
+   * @remarks
+   * This function calculates the minimum number of bytes needed to represent an signed one's in binary format.
+   * It uses the `Math.clz32` function to count the number of leading zeros in the binary representation of the value.
+   * It subtracts this from 33 (equivilent to the number of bits in the signed one's complement +1 to account for the sign) to get the number of bits needed.
+   * The result is rounded up to the nearest byte.
+   * @param value The value to check
+   * @returns The calculated minimum length in bytes
+   */
+  minLengthOfSignedOnesComplement(value: number) {
+    // Length of the number as a unsigned int+1 is the bytes (to take into account the sign bit)
+    // This is then converted to bytes
+    return Math.ceil((33 - Math.clz32(Math.abs(value))) / 8);
+  }
+  /**
    * Encode and write a signed one's complement
    * @param value The number to encode
    * @param bytes How many bytes to make the encoded value
    * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeSignedOnesComplement(value: number, bytes?: number) {
-    bytes ||= Math.ceil((33 - Math.clz32(Math.abs(value))) / 8);
+  writeSignedOnesComplement(value: number, bytes: number) {
     return wrapForPromise(
       this.writeUnsignedInt(
         value < 0
@@ -283,23 +337,39 @@ export abstract class writableBufferBase<
   /**
    * Encode and write a signed ones complement (one byte)
    * @param value The number to encode
+   * @returns How many bytes were written (1)
    */
   writeSignedOnesComplementByte(value: number) {
-    return wrapForPromise(
-      this.push(value < 0 ? (value - 1) & 0xff : value),
-      void 0
-    );
+    return wrapForPromise(this.push(value < 0 ? (value - 1) & 0xff : value), 1);
   }
   /**
    * Encode and write a signed ones complements
    * @param values The numbers to encode
+   * @returns How many bytes were written (Same as values.length)
    */
   writeSignedOnesComplementByteArray(values: number[]) {
     return wrapForAsyncCallArr(
       this.writeSignedOnesComplementByte.bind(this),
       values.map((value) => [value]),
-      void 0
+      values.length
     );
+  }
+  /**
+   * Calculate the minimum length of a signed integer in bytes.
+   * WARNING: No signed integers above 4278190079 or below -4278190079 (2^31 - 1) are supported, so this will not work for those.
+   * This is due to the limitations of bitwise operators. You can write numbers higher than that via writeSignedIntegerBigint, but this function will not work for them.
+   * @remarks
+   * This function calculates the minimum number of bytes needed to represent a signed integer in binary format.
+   * It uses the `Math.clz32` function to count the number of leading zeros in the binary representation of the value.
+   * It subtracts this from 33 (equivilent to the number of bits in the signed integer +1 to account for the sign) to get the number of bits needed.
+   * The result is rounded up to the nearest byte.
+   * @param value The value to check
+   * @returns The calculated minimum length in bytes
+   */
+  minLengthOfSignedInteger(value: number) {
+    // Length of the number as a unsigned int+1 is the bytes (to take into account the sign bit)
+    // This is then converted to bytes
+    return Math.ceil((33 - Math.clz32(Math.abs(value))) / 8);
   }
   /**
    * Encode and write a signed integer
@@ -307,9 +377,8 @@ export abstract class writableBufferBase<
    * @param bytes How many bytes to make the encoded value
    * @returns How many bytes were written (Same as bytes parameter if provided)
    */
-  writeSignedInteger(value: number, bytes?: number) {
+  writeSignedInteger(value: number, bytes: number) {
     const absValue = Math.abs(value);
-    bytes ||= Math.ceil((33 - Math.clz32(absValue)) / 8);
     const bits = bytes * 8;
     return wrapForPromise(
       this.writeUnsignedInt(
@@ -345,22 +414,24 @@ export abstract class writableBufferBase<
   /**
    * Encode and write a signed integer (one byte)
    * @param value The number to encode
+   * @returns How many bytes were written (1)
    */
   writeSignedIntegerByte(value: number) {
     return wrapForPromise(
       this.push(value < 0 ? 0b10000000 | -value : value),
-      void 0
+      1
     );
   }
   /**
    * Encode and write signed integers (one byte)
    * @param values The numbers to encode
+   * @returns How many bytes were written (Same as values.length)
    */
   writeSignedIntegerByteArray(values: number[]) {
     return wrapForAsyncCallArr(
       this.writeSignedIntegerByte.bind(this),
       values.map((value) => [value]),
-      void 0
+      values.length
     );
   }
 }
@@ -386,7 +457,13 @@ export class writableBuffer
   #buffers: Uint8Array[];
   #used: number = 0;
   get buffer(): Uint8Array {
-    return joinUint8Arrays([...this.#buffers.slice(0,-1),this.#buffers[this.#buffers.length-1].subarray(0,this.#used)], this.length);
+    return joinUint8Arrays(
+      [
+        ...this.#buffers.slice(0, -1),
+        this.#buffers[this.#buffers.length - 1].subarray(0, this.#used),
+      ],
+      this.length
+    );
   }
   set buffer(value: uint8ArrayLike | writableBufferStorage) {
     if (
@@ -398,15 +475,19 @@ export class writableBuffer
     } else {
       this.#buffers = [new Uint8Array(this.#chunkSize)];
       this.#used = 0;
-      if (value instanceof writableBufferBase){
+      if (value instanceof writableBufferBase) {
         // Processing goes into getting this value, so don't grab it twice
         const buffer = value.buffer;
         if (buffer instanceof Uint8Array) {
           this.writeUint8Array(buffer);
-          return
+          return;
         }
       }
-      this.writeUint8Array(value instanceof Uint8Array ? value : new Uint8Array(value as uint8ArrayLike));
+      this.writeUint8Array(
+        value instanceof Uint8Array
+          ? value
+          : new Uint8Array(value as uint8ArrayLike)
+      );
     }
   }
   get length() {
@@ -434,11 +515,11 @@ export class writableBuffer
         this.#used = 0;
         this.#buffers.unshift(new Uint8Array(this.#chunkSize));
       }
-      const bytesToWrite = Math.min(
-        bytesLeft,
-        this.#chunkSize - this.#used
+      const bytesToWrite = Math.min(bytesLeft, this.#chunkSize - this.#used);
+      this.#buffers[0].set(
+        value.subarray(index, index + bytesToWrite),
+        this.#used
       );
-      this.#buffers[0].set(value.subarray(index, index + bytesToWrite), this.#used);
       this.#used += bytesToWrite;
       index += bytesToWrite;
       bytesLeft -= bytesToWrite;
@@ -456,11 +537,11 @@ export class writableBuffer
         this.#used = 0;
         this.#buffers.unshift(new Uint8Array(this.#chunkSize));
       }
-      const bytesToWrite = Math.min(
-        bytesLeft,
-        this.#chunkSize - this.#used
+      const bytesToWrite = Math.min(bytesLeft, this.#chunkSize - this.#used);
+      this.#buffers[0].set(
+        value.slice(index, index + bytesToWrite),
+        this.#used
       );
-      this.#buffers[0].set(value.slice(index, index + bytesToWrite), this.#used);
       this.#used += bytesToWrite;
       index += bytesToWrite;
       bytesLeft -= bytesToWrite;
@@ -470,7 +551,4 @@ export class writableBuffer
     this.writeArray(value.slice(0).reverse());
   }
 }
-export const writableBufferLE = addDefaultEndianness(
-  writableBuffer,
-  true
-);
+export const writableBufferLE = addDefaultEndianness(writableBuffer, true);
