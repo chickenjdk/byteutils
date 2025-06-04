@@ -1,74 +1,18 @@
-name: Deploy Docs & Publish
+# .github/workflows/deploy.yml
+
+name: Deploy
 
 on:
   release:
     types: [published]
 
 jobs:
-  build-and-release:
-    if: github.event.release.prerelease == false && github.event.release.target_commitish == 'main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
-      packages: write
-
-    env:
-      VERSION: ${{ github.ref_name }}
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org/'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Update package.json version
-        run: |
-          node -e "
-          const fs = require('fs');
-          const pkg = JSON.parse(fs.readFileSync('package.json'));
-          pkg.version = process.env.VERSION.startsWith('v') ? process.env.VERSION.slice(1) : process.env.VERSION;
-          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
-          "
-
-      - name: Build
-        run: npm run build
-
-      - name: Update README.md docs URL
-        run: |
-          sed -i "s|https://chickenjdk.github.io/byteutils/docs/[^\)]*|https://chickenjdk.github.io/byteutils/docs/${{ env.VERSION }}|g" README.md
-
-      - name: Commit updated version + docs link
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json README.md
-          git commit -m "chore: release ${{ env.VERSION }}" || echo "No changes to commit"
-          git push origin HEAD:${{ github.event.release.target_commitish }}
-
-
-      - name: Build docs with TypeDoc
-        run: npm run docs
-
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs
-          destination_dir: docs/${{ env.VERSION }}
-          keep_files: true
-
-      - name: Rm docs directory
-        run: rm -rf docs
-
-      - name: Publish to npm
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+  deploy:
+    uses: chickenjdk/github-actions-workflows/.github/workflows/deploy-docs-and-publish.yml@main
+    with:
+      node-version: '22'
+      registry-url: 'https://registry.npmjs.org/'
+      docs-dir: './docs'
+      docs-base-url: 'https://chickenjdk.github.io/byteutils'
+    secrets:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
