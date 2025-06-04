@@ -1,4 +1,5 @@
-import { addDefaultEndianness, writableBufferBase } from "../";
+import { addDefaultEndianness} from "../common";
+import {writableBufferBase } from "../writableBuffer";
 import { Writable } from "stream";
 export class writableStream extends writableBufferBase<true> {
   #stream: Writable;

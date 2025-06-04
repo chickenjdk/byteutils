@@ -1,4 +1,4 @@
-import { readableBufferBaseAsync } from "../";
+import { readableBufferBaseAsync } from "../readableBuffer";
 import type { Readable } from "stream";
 import { joinUint8Arrays } from "../common";
 export class readableStream extends readableBufferBaseAsync {
