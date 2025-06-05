@@ -6,6 +6,11 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
 jobs:
   deploy:
     uses: chickenjdk/github-actions-workflows/.github/workflows/deploy-docs-and-publish.yml@main
