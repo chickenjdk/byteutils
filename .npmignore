@@ -2,3 +2,6 @@ src/
 .gitignore
 TODO.md
 tsconfig.json
+typedoc.json
+docs/
+.github/
