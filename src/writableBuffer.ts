@@ -552,3 +552,87 @@ export class writableBuffer
   }
 }
 export const writableBufferLE = addDefaultEndianness(writableBuffer, true);
+
+export class writableBufferFixedSize
+  extends writableBufferBase<false>
+  implements writableBufferStorage
+{
+  #buffer: Uint8Array;
+  #used: number = 0;
+  get buffer(): Uint8Array {
+    return this.#buffer.subarray(0, this.#used);
+  }
+  set buffer(value: uint8ArrayLike | writableBufferStorage) {
+    if (value.length > this.#buffer.length) {
+      throw new Error("Buffer does not have capacity to fit the new buffer's contents");
+    }
+    // Don't check for writableBufferFixedSize because copying the buffer is what we do anyway and using the same one can result in issues if both instances are used
+    if (value instanceof writableBufferBase) {
+      // Processing goes into getting this value, so don't grab it twice
+      const buffer = value.buffer;
+      if (buffer instanceof Uint8Array) {
+        this.#buffer.set(buffer, 0);
+        this.#used = buffer.length;
+        return;
+      }
+    }
+    this.#buffer.set(value as uint8ArrayLike, 0);
+    this.#used = (value as uint8ArrayLike).length;
+  }
+  get length(): number {
+    return this.#used;
+  }
+  get maxLength(): number {
+    return this.#buffer.length;
+  }
+  set maxLength(value: number) {
+    if (value < this.#used) {
+      throw new Error("Cannot set maxLength to less than used length");
+    }
+    const oldBuffer = this.buffer;
+    this.#buffer = new Uint8Array(value);
+    this.#buffer.set(oldBuffer);
+  }
+  constructor(maxLength: number = 2000) {
+    super();
+    this.#buffer = new Uint8Array(maxLength);
+  }
+  push(value: number) {
+    if (this.#used === this.#buffer.length) {
+      throw new Error("Buffer does not have capacity to write the data");
+    }
+    this.#buffer[this.#used++] = value;
+  }
+  writeUint8Array(value: Uint8Array): void {
+    if (this.#used + value.length > this.#buffer.length) {
+      throw new Error("Buffer does not have capacity to write the data");
+    }
+    this.#buffer.set(value, this.#used);
+    this.#used += value.length;
+  }
+  writeUint8ArrayBackwards(value: Uint8Array): void {
+    // Don't mutate the origional value
+    this.writeUint8Array(value.slice(0).reverse());
+  }
+  writeArray(value: number[]) {
+    if (this.#used + value.length > this.#buffer.length) {
+      throw new Error("Buffer does not have capacity to write the data");
+    }
+    this.#buffer.set(value, this.#used);
+    this.#used += value.length;
+  }
+  writeArrayBackwards(value: number[]) {
+    // Don't mutate the origional value
+    this.writeArray(value.slice(0).reverse());
+  }
+  writeWriteableBuffer(value: writableBufferStorage) {
+    if (value.length > this.#buffer.length - this.#used) {
+      throw new Error("Buffer does not have capacity to write the data");
+    }
+    return this.writeUint8Array(value.buffer);
+  }
+}
+export const writableBufferFixedSizeLE = addDefaultEndianness(
+  writableBufferFixedSize,
+  true
+);
