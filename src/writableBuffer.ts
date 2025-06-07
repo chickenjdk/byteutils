@@ -597,6 +597,12 @@ export class writableBufferFixedSize
     super();
     this.#buffer = new Uint8Array(maxLength);
   }
+  /**
+   * Reset the buffer
+   */
+  reset() {
+    this.#used = 0;
+  }
   push(value: number) {
     if (this.#used === this.#buffer.length) {
       throw new Error("Buffer does not have capacity to write the data");
