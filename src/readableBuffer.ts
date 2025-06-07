@@ -175,6 +175,10 @@ export abstract class readableBufferBase<
    */
   readTwosComplement(bytes: number) {
     return maybePromiseThen(this.readUnsignedInt(bytes), (read) => {
+      // No padding is needed with a full 4 bytes, and in fact, the padding messes it up! What a world. (not needed for bigint because there is no size limit)
+      if (bytes === 4) {
+        return read >> 0;
+      }
       const bits = bytes * 8;
       // Just pad the value with 1s
       return (read & (1 << (bits - 1))) !== 0
@@ -270,12 +274,16 @@ export abstract class readableBufferBase<
    * @returns The parsed signed ones compement
    */
   readSignedOnesComplement(bytes: number) {
-    const bits = bytes * 8;
-    return maybePromiseThen(this.readUnsignedInt(bytes), (read) =>
-      (read & (1 << (bits - 1))) !== 0
+    return maybePromiseThen(this.readUnsignedInt(bytes), (read) => {
+      // No padding is needed with a full 4 bytes, and in fact, the padding messes it up! What a world. (not needed for bigint because there is no size limit)
+      if (bytes === 4) {
+        return read >> 0;
+      }
+      const bits = bytes * 8;
+      return (read & (1 << (bits - 1))) !== 0
         ? -(~read & (constants.allOnes >>> (33 - bits)))
-        : read
-    );
+        : read;
+    });
   }
   /**
    * Parse a signed one's complement as a bigint
