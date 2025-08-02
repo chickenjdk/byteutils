@@ -213,7 +213,7 @@ export abstract class writableBufferBase<
    * @returns How many bytes were written (1)
    */
   writeTwosComplementByte(value: number) {
-    return wrapForPromise(1, this.push((value & 0b11111111) >>> 0));
+    return wrapForPromise(this.push((value & 0b11111111) >>> 0), 1);
   }
   /**
    * Write twos complements to the buffer (one byte each)
@@ -237,13 +237,13 @@ export abstract class writableBufferBase<
     // Typed arrays are endian-dependent, so if the computer is little-endian, the output will be in little-endian format
     if (isBigEndian) {
       return wrapForPromise(
-        4,
-        this.writeUint8ArrayEndian(uint8Float32ArrayView)
+        this.writeUint8ArrayEndian(uint8Float32ArrayView),
+        4
       );
     } else {
       return wrapForPromise(
-        4,
-        this.writeUint8ArrayBackwardsEndian(uint8Float32ArrayView)
+        this.writeUint8ArrayBackwardsEndian(uint8Float32ArrayView),
+        4
       );
     }
   }
@@ -256,13 +256,13 @@ export abstract class writableBufferBase<
     float64Array[0] = value;
     if (isBigEndian) {
       return wrapForPromise(
-        8,
-        this.writeUint8ArrayEndian(uint8Float64ArrayView)
+        this.writeUint8ArrayEndian(uint8Float64ArrayView),
+        8
       );
     } else {
       return wrapForPromise(
-        8,
-        this.writeUint8ArrayBackwardsEndian(uint8Float64ArrayView)
+        this.writeUint8ArrayBackwardsEndian(uint8Float64ArrayView),
+        8
       );
     }
   }
@@ -564,7 +564,9 @@ export class writableBufferFixedSize
   }
   set buffer(value: uint8ArrayLike | writableBufferStorage) {
     if (value.length > this.#buffer.length) {
-      throw new Error("Buffer does not have capacity to fit the new buffer's contents");
+      throw new Error(
+        "Buffer does not have capacity to fit the new buffer's contents"
+      );
     }
     // Don't check for writableBufferFixedSize because copying the buffer is what we do anyway and using the same one can result in issues if both instances are used
     if (value instanceof writableBufferBase) {
