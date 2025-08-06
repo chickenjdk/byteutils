@@ -131,3 +131,6 @@ dist
 
 # Typedoc output
 docs/
+
+# Vscode config
+.vscode/
