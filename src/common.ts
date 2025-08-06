@@ -34,17 +34,12 @@ export function joinUint8Arrays(
  * @param buffer The buffer to extend
  * @param isLe If to make the default endianness Little Endian
  */
-export function addDefaultEndianness<
-  T extends {
-    prototype: {
-      isLe: boolean;
-    };
-    new (...args: any[]): any; // Constructor signature
-  }
->(buffer: T, isLe: boolean) {
+export function addDefaultEndianness<classType extends new (...args: any[]) => { isLe: boolean }>(
+  buffer: classType,
+  isLe: boolean
+): classType {
   return class extends buffer {
     constructor(...args: any[]) {
-      // @ts-ignore
       super(...args);
       this.isLe = isLe;
     }

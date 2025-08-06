@@ -445,4 +445,8 @@ export class readableBuffer extends readableBufferBase<false> {
     return this.readArray(bytes).reverse();
   }
 }
+/**
+ * Little-endian version of readableBuffer
+ * @remarks You can generate this class yourself with `addDefaultEndianness(readableBuffer, true)` or make a already created instance little endian via `instance.isLe = true`
+ */
 export const readableBufferLe = addDefaultEndianness(readableBuffer, true);

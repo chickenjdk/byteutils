@@ -551,6 +551,10 @@ export class writableBuffer
     this.writeArray(value.slice(0).reverse());
   }
 }
+/**
+ * Little-endian version of writableBuffer
+ * @remarks You can generate this class yourself with `addDefaultEndianness(writableBuffer, true)` or make a already created instance little endian via `instance.isLe = true`
+ */
 export const writableBufferLE = addDefaultEndianness(writableBuffer, true);
 
 export class writableBufferFixedSize
@@ -640,6 +644,10 @@ export class writableBufferFixedSize
     return this.writeUint8Array(value.buffer);
   }
 }
+/**
+ * Little-endian version of writableBufferFixedSize
+ * @remarks You can generate this class yourself with `addDefaultEndianness(writableBufferFixedSize, true)` or make a already created instance little endian via `instance.isLe = true`
+ */
 export const writableBufferFixedSizeLE = addDefaultEndianness(
   writableBufferFixedSize,
   true

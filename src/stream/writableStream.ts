@@ -50,6 +50,10 @@ export class writableStream extends writableBufferBase<true> {
     });
   }
 }
+/**
+ * Little-endian version of writableStream
+ * @remarks You can generate this class yourself with `addDefaultEndianness(cwritableStream, true)` or make a already created instance little endian via `instance.isLe = true`
+ */
 export const writableStreamLE = addDefaultEndianness(writableStream, true);
 
 export class chunkingWritableStream extends writableBufferBase<true> {
@@ -200,6 +204,10 @@ export class chunkingWritableStream extends writableBufferBase<true> {
     return this.writeArray(value.slice(0).reverse());
   }
 }
+/**
+ * Little-endian version of chunkingWritableStream
+ * @remarks You can generate this class yourself with `addDefaultEndianness(chunkingWritableStream, true)` or make a already created instance little endian via `instance.isLe = true`
+ */
 export const chunkingWritableStreamLE = addDefaultEndianness(
   chunkingWritableStream,
   true

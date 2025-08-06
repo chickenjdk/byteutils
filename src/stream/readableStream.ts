@@ -1,6 +1,6 @@
 import { readableBufferBaseAsync } from "../readableBuffer";
 import type { Readable } from "stream";
-import { joinUint8Arrays } from "../common";
+import { addDefaultEndianness, joinUint8Arrays } from "../common";
 export class readableStream extends readableBufferBaseAsync {
   #stream: Readable;
   #chunkQuete: Uint8Array[] = [];
@@ -42,7 +42,7 @@ export class readableStream extends readableBufferBaseAsync {
         // Disable all methods that would read from the stream
         // All read calls pass through those functions, so we can just disable all reads with this
         // This is a hack, but it is the only way to make sure that all calls to #aquireLock will be rejected while keeping not checking for the stream being destroyed in those functions
-        // I would just ovverride the methods but private methods can not be ovverwritten
+        // I would just override the methods but private methods can not be overwritten
         // Empty the queue to allow the contents to gc
         this.#lockQueue = [];
         // Lock the stream so we can reject all calls to #aquireLock
@@ -175,3 +175,9 @@ export class readableStream extends readableBufferBaseAsync {
     return (await this.readArray(bytes)).reverse();
   }
 }
+
+/**
+ * Little-endian version of readableStream
+ * @remarks You can generate this class yourself with `addDefaultEndianness(readableStream, true)` or make a already created instance little endian via `instance.isLe = true`
+ */
+export const readableStreamLE = addDefaultEndianness(readableStream, true);
