@@ -1,13 +1,13 @@
 # byteutils
 
-Some basic tools for working with big and little endian binary data.
+Advanced tools for manipulating binary data in JavaScript
 
 ## Supported encodings:
 
 - unsigned integer (bigint and number)
-- signed integer (bigint, number, and one-byte-long optimized function (number), and one-byte-long-for-each-element-array optimized funtion (number[]))
-- two's complement (bigint, number, and one-byte-long optimized function (number), and one-byte-long-for-each-element-array optimized funtion (number[]))
-- signed one's complement (bigint, number, and one-byte-long optimized function (number), and one-byte-long-for-each-element-array optimized funtion (number[]))
+- signed integer (bigint, number, and one-byte-long optimized function (number), and one-byte-long-for-each-element-array optimized function (number[]))
+- two's complement (bigint, number, and one-byte-long optimized function (number), and one-byte-long-for-each-element-array optimized function (number[]))
+- signed one's complement (bigint, number, and one-byte-long optimized function (number), and one-byte-long-for-each-element-array optimized function (number[]))
 - float (number)
 - double (number)
 - utf8 string
@@ -132,7 +132,7 @@ function buildTransform() {
     writableTranslationInst.reset();
     const int = await readableInst.readVarint();
     writableTranslationInst.writeTwosComplement(int, 4);
-    // Copying the buffer is important, not doing so will result in the last number over and over because it it later overrwritten
+    // Copying the buffer is important, not doing so will result in the last number over and over because it is later overrwritten
     waitingChunks.push(writableTranslationInst.buffer.slice(0));
     if (!TransformStream.closed) {
       handler = handleVarint();

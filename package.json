@@ -1,7 +1,7 @@
 {
   "name": "@chickenjdk/byteutils",
   "version": "3.2.1",
-  "description": "Some utilitys for working with binary data",
+  "description": "Advanced tools for manipulating binary data in JavaScript",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
