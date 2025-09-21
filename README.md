@@ -19,7 +19,7 @@ supports async and sync data sources (with the same methods in the same class, s
 implements reading/writing from streams out of the box, and just plain reading or writing binary data to or from a Uint8Array,
 automaticly resizing and fixed length writableBuffer,
 and mutch more.
-[See docs](https://chickenjdk.github.io/byteutils/docs/v3.3.0)
+[See docs](https://chickenjdk.github.io/byteutils/docs/v3.3.1)
 
 ## Add your own encoding
 
