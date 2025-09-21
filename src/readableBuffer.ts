@@ -237,16 +237,16 @@ export abstract class readableBufferBase<
   }
   /**
    * Parse a double
-   * @returns The parsed float
+   * @returns The parsed double float
    */
   readDouble() {
     if (isBigEndian) {
-      return maybePromiseThen(this.readEndian(4), (read) => {
+      return maybePromiseThen(this.readEndian(8), (read) => {
         uint8Float64ArrayView.set(read);
         return float64Array[0];
       });
     } else {
-      return maybePromiseThen(this.readBackwardsEndian(4), (read) => {
+      return maybePromiseThen(this.readBackwardsEndian(8), (read) => {
         uint8Float64ArrayView.set(read);
         return float64Array[0];
       });
