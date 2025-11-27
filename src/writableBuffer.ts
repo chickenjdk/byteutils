@@ -459,8 +459,8 @@ export class writableBuffer
   get buffer(): Uint8Array {
     return joinUint8Arrays(
       [
-        ...this.#buffers.slice(0, -1),
-        this.#buffers[this.#buffers.length - 1].subarray(0, this.#used),
+        ...this.#buffers.slice(1),
+        this.#buffers[0].subarray(0, this.#used),
       ],
       this.length
     );
