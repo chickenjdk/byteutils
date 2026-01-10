@@ -19,7 +19,7 @@ const constants = {
   // 11111111111111111111111100000000
   allOnesButLastByte: 0xffffff00,
 };
-// Returns not typed for non-abstract/abstracet alias methods
+// Returns not typed for non-abstract/abstract alias methods
 export abstract class writableBufferBase<
   IsAsync extends boolean = true | false
 > {
@@ -56,14 +56,14 @@ export abstract class writableBufferBase<
   }
   // Little-endian support: <-
   /**
-   * Write data to the buffer (writes data that was origionaly in BE format to the endianness of the buffer)
+   * Write data to the buffer (writes data that was originally in BE format to the endianness of the buffer)
    * @param value The data to write
    */
   writeArrayEndian:
     | cloneFunc<typeof this.writeArray>
     | cloneFunc<typeof this.writeArrayBackwards> = this.writeArray;
   /**
-   * Write data to the buffer backwards (writes data that was origionaly in LE format to the endianness of the buffer, I know that "backwards" is a little opinionated but the class was origionaly BE-only and I did not want to change too mutch)
+   * Write data to the buffer backwards (writes data that was originally in LE format to the endianness of the buffer, I know that "backwards" is a little opinionated but the class was origionaly BE-only and I did not want to change too mutch)
    * @param value The data to write
    */
   writeArrayBackwardsEndian:
@@ -71,14 +71,14 @@ export abstract class writableBufferBase<
     | cloneFunc<typeof this.writeArrayBackwards> = this.writeArrayBackwards;
   /**
    * Write a Uint8Array to the buffer (for the endian)
-   * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
+   * Alias for .write because .write can handle Uint8Arrays. This exists to have the similar naming of methods as readableBuffer's methods
    */
   writeUint8ArrayEndian:
     | cloneFunc<typeof this.writeUint8Array>
     | cloneFunc<typeof this.writeUint8ArrayBackwards> = this.writeUint8Array;
   /**
-   * Write a Uint8Array to the buffer backwars (for the endian)
-   * Alias for .write because .write can handle Uint8Arrays. This exsists to have the similar naming of methods as readableBuffer's methods
+   * Write a Uint8Array to the buffer backwards (for the endian)
+   * Alias for .write because .write can handle Uint8Arrays. This exists to have the similar naming of methods as readableBuffer's methods
    */
   writeUint8ArrayBackwardsEndian:
     | cloneFunc<typeof this.writeUint8Array>
@@ -109,10 +109,10 @@ export abstract class writableBufferBase<
     this.#isLe = isLe;
   }
   // ->
-  // REMEMBER: return type is not specifyed so the isasync param properly propigates
+  // REMEMBER: return type is not specified so the isasync param properly propagates
   /**
    * Calculate the minimum length of an unsigned integer in bytes.
-   * WARNING: No unssigned ints above 4294967295 (2^32 - 1) are supported, so this will not work for those.
+   * WARNING: No unsigned ints above 4294967295 (2^32 - 1) are supported, so this will not work for those.
    * This is due to the limitations of bitwise operators. You can write numbers higher than that via writeUnsignedIntBigint, but this function will not work for them.
    * @remarks
    * This function calculates the minimum number of bytes needed to represent an unsigned integer in binary format.
@@ -127,36 +127,38 @@ export abstract class writableBufferBase<
   /**
    * Write an unsigned integer to the buffer
    * @param value The unsigned int to write
-   * @param bytes How many bytes the unsined int is (If not provided, it will write the minimum length)
+   * @param bytes How many bytes the unsigned int is (If not provided, it will write the minimum length)
    * @returns How many bytes were written (Same as bytes parameter if provided)
    */
   writeUnsignedInt(value: number, bytes: number) {
-    let mask = 0b11111111;
+    let mask = 0b11111111; // The byte to grab
     let out: number[] = [];
     let i = -8;
     const bits = bytes * 8;
+    // We grab the lowest bytes first, aka little endian
     while ((i += 8) < bits) {
-      out.unshift((mask & value) >>> i);
+      out.push((mask & value) >>> i);
       mask <<= 8;
     }
-    return wrapForPromise(this.writeArrayEndian(out), bytes);
+    return wrapForPromise(this.writeArrayBackwardsEndian(out), bytes);
   }
   /**
    * Write an unsigned integer to the buffer
    * @param value The unsigned int to write (a bigint)
-   * @param bytes How many bytes the unsined int is (If not provided, it will write the minimum length)
+   * @param bytes How many bytes the unsigned int is (If not provided, it will write the minimum length)
    * @returns How many bytes were written (Same as bytes parameter)
    */
   writeUnsignedIntBigint(value: bigint, bytes: number) {
-    let mask = 0b11111111n;
+    let mask = 0b11111111n; // The byte to grab
     let out: number[] = [];
     let i = -8n;
     const bits = bytes * 8;
+    // We grab the lowest bytes first, aka little endian
     while ((i += 8n) < bits) {
-      out.unshift(Number((mask & value) >> i));
+      out.push(Number((mask & value) >> i));
       mask <<= 8n;
     }
-    return wrapForPromise(this.writeArrayEndian(out), bytes);
+    return wrapForPromise(this.writeArrayBackwardsEndian(out), bytes);
   }
   /**
    * Calculate the minimum length of a two's complement in bytes.
@@ -288,7 +290,7 @@ export abstract class writableBufferBase<
    * @remarks
    * This function calculates the minimum number of bytes needed to represent an signed one's in binary format.
    * It uses the `Math.clz32` function to count the number of leading zeros in the binary representation of the value.
-   * It subtracts this from 33 (equivilent to the number of bits in the signed one's complement +1 to account for the sign) to get the number of bits needed.
+   * It subtracts this from 33 (equivalent to the number of bits in the signed one's complement +1 to account for the sign) to get the number of bits needed.
    * The result is rounded up to the nearest byte.
    * @param value The value to check
    * @returns The calculated minimum length in bytes
@@ -526,7 +528,7 @@ export class writableBuffer
     }
   }
   writeUint8ArrayBackwards(value: Uint8Array): void {
-    // Don't mutate the origional value
+    // Don't mutate the original value
     this.writeUint8Array(value.slice(0).reverse());
   }
   writeArray(value: number[]) {

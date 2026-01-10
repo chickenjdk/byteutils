@@ -11,7 +11,7 @@ export const isBigEndian = uint8Float32ArrayView[0] === 64;
 /**
  * Join uint8arrays together
  * @param arrays The uint8arrays to join
- * @param totalLength The total legth of the arrays. Please provide if known as an optimization.
+ * @param totalLength The total length of the arrays. Please provide if known as an optimization.
  * If not provided, it will be calculated by summing the lengths of the arrays.
  * @returns The joined uint8array
  */
@@ -48,10 +48,10 @@ export function addDefaultEndianness<classType extends new (...args: any[]) => {
 // Promise helpers
 /**
  * Wrap a value for the completion of a promise
- * @param awaiter The value to await (may not actualy be a promise, if not returns value with no wrappping)
+ * @param awaiter The value to await (may not actually be a promise, if not returns value with no wrapping)
  * @param value The value to return
  */
-export function wrapForPromise<awaiter extends unknown, value extends unknown>(
+export function wrapForPromise<awaiter extends Promise<unknown> | unknown, value extends unknown>(
   awaiter: awaiter,
   value: value
 ): awaiter extends Promise<unknown> ? Promise<value> : value {
@@ -65,7 +65,7 @@ export function wrapForPromise<awaiter extends unknown, value extends unknown>(
 }
 /**
  * Wrap a value for the completion of a promise
- * @param awaiter The value to await (may not actualy be a promise, if not returns value with no wrappping)
+ * @param awaiter The value to await (may not actually be a promise, if not returns value with no wrapping)
  * @param value The value to return
  */
 export function wrapForAsyncCallArr<
@@ -94,7 +94,7 @@ export function wrapForAsyncCallArr<
   return value;
 }
 /**
- * A funtion to help with processing values that may or may not be promises
+ * A function to help with processing values that may or may not be promises
  * @param maybePromise The value that may or may not be a promise
  * @param callback The callback to call with the value returned when the promise is resolved or when the value is returned directly.
  * @returns Whet the callback returns, if the input is a promise, it will return a promise that resolves to the value returned by the callback.

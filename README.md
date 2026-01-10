@@ -14,8 +14,8 @@ Advanced tools for manipulating binary data in JavaScript
 - mutf8 string (java's string encoding)
 
 Functionality that the buffer module simply can't (the buffer module is not used under the hood).
-Extendable to interact with your own data pipelines and to easaly add your own encodings,
-supports async and sync data sources (with the same methods in the same class, so you can async or sync data with the same class extentions, see `Add your own encoding`),
+Extendable to interact with your own data pipelines and to easily add your own encodings,
+supports async and sync data sources (with the same methods in the same class, so you can async or sync data with the same class extensions, see `Add your own encoding`),
 implements reading/writing from streams out of the box, and just plain reading or writing binary data to or from a Uint8Array,
 automaticly resizing and fixed length writableBuffer,
 and mutch more.
@@ -25,8 +25,8 @@ and mutch more.
 
 ### Varint
 
-First, find the class you want to extend. For this exsample, we will be extending readableStream to add minecraft's varint [From here](https://codegolf.stackexchange.com/questions/275210/parse-minecrafts-varint).
-This was mainly to show how to add a varible-length encoding. We also have a delay between writed to show how this library can handle waiting for data from streams
+First, find the class you want to extend. For this example, we will be extending readableStream to add minecraft's varint [From here](https://codegolf.stackexchange.com/questions/275210/parse-minecrafts-varint).
+This was mainly to show how to add a variable-length encoding. We also have a delay between writes to show how this library can handle waiting for data from streams
 
 ```javascript
 import { readableStream, common } from "@chickenjdk/byteutils";
@@ -132,7 +132,7 @@ function buildTransform() {
     writableTranslationInst.reset();
     const int = await readableInst.readVarint();
     writableTranslationInst.writeTwosComplement(int, 4);
-    // Copying the buffer is important, not doing so will result in the last number over and over because it is later overrwritten
+    // Copying the buffer is important, not doing so will result in the last number over and over because it is later overwritten
     waitingChunks.push(writableTranslationInst.buffer.slice(0));
     if (!TransformStream.closed) {
       handler = handleVarint();
@@ -155,7 +155,7 @@ const loggerReadableStreamInst = new readableStream(loggerStream);
   let i = 0;
   while (!loggerStream.closed) {
     // Don't worry about Stream ended before listener could be satisfied errors in this configuration
-    // You could check if the error is that, but this is just an exsample
+    // You could check if the error is that, but this is just an example
     try {
       console.log(
         `Read ${await loggerReadableStreamInst.readTwosComplement(

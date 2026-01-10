@@ -3,11 +3,11 @@ import type { Readable } from "stream";
 import { addDefaultEndianness, joinUint8Arrays } from "../common";
 export class readableStream extends readableBufferBaseAsync {
   #stream: Readable;
-  #chunkQuete: Uint8Array[] = [];
+  #chunkQueue: Uint8Array[] = [];
   #chunkIdx: number = 0;
   #locked: boolean = false;
   #lockQueue: [() => void, (reason: any) => void][] = [];
-  #onDataListerers: [() => void, (reason: any) => void][] = [];
+  #onDataListeners: [() => void, (reason: any) => void][] = [];
   #onDrainListeners: (() => void)[] = [];
   #onceDrainListeners: (() => void)[] = [];
   drained: boolean = true;
@@ -16,7 +16,7 @@ export class readableStream extends readableBufferBaseAsync {
     return this.#stream;
   }
   get _chunks(): Uint8Array[] {
-    return this.#chunkQuete;
+    return this.#chunkQueue;
   }
   onDrain(listener: () => void) {
     this.#onDrainListeners.push(listener);
@@ -28,15 +28,15 @@ export class readableStream extends readableBufferBaseAsync {
     super();
     this.#stream = stream;
     this.#stream.on("data", (chunk: Uint8Array) => {
-      this.#chunkQuete.push(chunk);
+      this.#chunkQueue.push(chunk);
       this.drained = false;
-      this.#onDataListerers.forEach(([listener]) => listener());
+      this.#onDataListeners.forEach(([listener]) => listener());
     });
     this.#stream.on("end", () => {
       this.destroyed = true;
       const nukeReads = () => {
         // Abort all listeners because there is no more data
-        [...this.#lockQueue, ...this.#onDataListerers].forEach(([, reject]) => {
+        [...this.#lockQueue, ...this.#onDataListeners].forEach(([, reject]) => {
           reject(new Error("Stream ended before listener could be satisfied"));
         });
         // Disable all methods that would read from the stream
@@ -58,14 +58,14 @@ export class readableStream extends readableBufferBaseAsync {
           return undefined;
         };
       };
-      if (this.#onDataListerers.length > 0) {
+      if (this.#onDataListeners.length > 0) {
         // If there are listeners waiting for data, well there is no data so end nuke the stream
         nukeReads();
       }
       // When a onDataListener is registered, we know there is no more data to be had, so we nuke the stream
-      const oldPush = this.#onDataListerers.push;
-      this.#onDataListerers.push = (...args) => {
-        const res = oldPush.apply(this.#onDataListerers, args);
+      const oldPush = this.#onDataListeners.push;
+      this.#onDataListeners.push = (...args) => {
+        const res = oldPush.apply(this.#onDataListeners, args);
         nukeReads();
         return res;
       };
@@ -92,8 +92,8 @@ export class readableStream extends readableBufferBaseAsync {
       listeners.length > 0 &&
       !this.drained &&
       this.#stream.readableLength === 0 &&
-      (this.#chunkQuete.length === 0 ||
-        this.#chunkIdx >= this.#chunkQuete[0].length)
+      (this.#chunkQueue.length === 0 ||
+        this.#chunkIdx >= this.#chunkQueue[0].length)
     ) {
       this.drained = true;
       listeners.forEach((value) => value());
@@ -104,13 +104,13 @@ export class readableStream extends readableBufferBaseAsync {
   async #waitChunk(): Promise<void> {
     // Handle used buffer first that way the data awaiter knows that the quete realy is empty
     if (
-      this.#chunkQuete.length > 0 &&
-      this.#chunkIdx >= this.#chunkQuete[0].length
+      this.#chunkQueue.length > 0 &&
+      this.#chunkIdx >= this.#chunkQueue[0].length
     ) {
       this.#chunkIdx = 0;
-      this.#chunkQuete.shift();
+      this.#chunkQueue.shift();
     }
-    if (this.#chunkQuete.length === 0) {
+    if (this.#chunkQueue.length === 0) {
       if (!this.drained && this.#stream.readableLength === 0) {
         this.drained = true;
         const listeners = [
@@ -124,13 +124,13 @@ export class readableStream extends readableBufferBaseAsync {
       }
       await new Promise<void>((resolve, reject) => {
         const onData = () => {
-          this.#onDataListerers.splice(
-            this.#onDataListerers.findIndex(([value]) => value === onData),
+          this.#onDataListeners.splice(
+            this.#onDataListeners.findIndex(([value]) => value === onData),
             1
           );
           resolve();
         };
-        this.#onDataListerers.push([onData, reject]);
+        this.#onDataListeners.push([onData, reject]);
       });
       this.#chunkIdx = 0;
     }
@@ -138,7 +138,7 @@ export class readableStream extends readableBufferBaseAsync {
   async shift(): Promise<number> {
     await this.#aquireLock();
     await this.#waitChunk();
-    const chunk = this.#chunkQuete[0];
+    const chunk = this.#chunkQueue[0];
     const byte = chunk[this.#chunkIdx++];
     await this.#relaseLock();
     return byte;
@@ -149,7 +149,7 @@ export class readableStream extends readableBufferBaseAsync {
     let bytesLeft = bytes;
     while (bytesLeft !== 0) {
       await this.#waitChunk();
-      const chunk = this.#chunkQuete[0];
+      const chunk = this.#chunkQueue[0];
       if (chunk.length - this.#chunkIdx > bytesLeft) {
         chunks.push(chunk.subarray(this.#chunkIdx, this.#chunkIdx + bytesLeft));
         this.#chunkIdx += bytesLeft;
@@ -158,7 +158,7 @@ export class readableStream extends readableBufferBaseAsync {
         chunks.push(chunk.subarray(this.#chunkIdx));
         bytesLeft -= chunk.length - this.#chunkIdx;
         // Consuming the whole chunk, so just delete it
-        this.#chunkQuete.shift();
+        this.#chunkQueue.shift();
       }
     }
     await this.#relaseLock();

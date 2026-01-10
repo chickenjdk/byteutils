@@ -440,7 +440,7 @@ export class readableBuffer extends readableBufferBase<false> {
     }
     return output;
   }
-  // This is a bit more usefull in writableBuffer
+  // This is a bit more useful in writableBuffer
   readArrayBackwards(bytes: number): number[] {
     return this.readArray(bytes).reverse();
   }
