@@ -43,13 +43,16 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
     const chunk = this.#buffer.subarray(0, this.#used);
     this.#buffer = new Uint8Array(chunkSize);
     this.#used = 0;
-    return wrapForPromise(this.handleChunk(chunk), undefined);
+    return wrapForPromise(
+      this.handleChunk(chunk),
+      undefined as void,
+    ) as MaybePromise<void, IsAsync>;
   }
   /**
-   * Write a Uint8Array
+   * Write a Uint8Array or array
    * @param data The data to write
    */
-  write(data: Uint8Array) {
+  write(data: Uint8Array | number[]) {
     let bytesLeft = data.length;
     let index = 0;
     return maybeAsyncWhileLoop(
@@ -60,7 +63,9 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
             this.#buffer.length - this.#used,
           );
           this.#buffer.set(
-            data.subarray(index, index + bytesToWrite),
+            data instanceof Array
+              ? data.slice(index, index + bytesToWrite)
+              : data.subarray(index, index + bytesToWrite),
             this.#used,
           );
           this.#used += bytesToWrite;
@@ -122,6 +127,30 @@ export class ChunkTransformerEmitter extends ChunkTransformer<false> {
   /**
    * Flush the currently buffered data to
    */
+  flush() {
+    return this._flush();
+  }
+}
+
+export class ChunkTransformerWithDataCallback<
+  IsAsync extends boolean = true | false,
+> extends ChunkTransformer<IsAsync> {
+  #callback: (chunk: Uint8Array) => MaybePromise<void, IsAsync>;
+  /**
+   * Take a non-uniform-size stream of Uint8Arrays, and join them together into uniform size Uint8Arrays.
+   * Calls a callback when a chunk is full or flush is called, in both cases with the data
+   * @param [chunkSize=2000] The size of a chunk. May be changed later.
+   */
+  constructor(
+    chunkSize: number = 2000,
+    callback: (chunk: Uint8Array) => MaybePromise<void, IsAsync>,
+  ) {
+    super(chunkSize);
+    this.#callback = callback;
+  }
+  handleChunk(chunk: Uint8Array) {
+    return this.#callback(chunk);
+  }
   flush() {
     return this._flush();
   }
