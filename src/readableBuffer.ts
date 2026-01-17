@@ -300,10 +300,10 @@ export abstract class readableBufferBase<
   }
   /**
    * Parse a signed one's complement from a byte
-   * @returns The parsed signed one's compement
+   * @returns The parsed signed one's complement
    */
   readSignedOnesComplementByte() {
-    // Possible: We invert the bits then 0 the first bit if the origional has the first bit as one, so the removal of the first bit is kind of useless. (By first bit I mean 0b10000000)
+    // Possible: We invert the bits then 0 the first bit if the original has the first bit as one, so the removal of the first bit is kind of useless. (By first bit I mean 0b10000000)
     return maybePromiseThen(this.shift(), (byte) =>
       byte & 0b10000000 ? -(~byte & 0b01111111) : byte
     );
@@ -311,7 +311,7 @@ export abstract class readableBufferBase<
   /**
    * Parse signed one's complements (one byte each) from bytes
    * @param bytes How many one's complements to read
-   * @returns The parsed signed one's compements
+   * @returns The parsed signed one's complements
    */
   readSignedOnesComplementByteArray(bytes: number) {
     return maybeAsyncCallArr(
