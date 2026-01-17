@@ -1,3 +1,4 @@
+import { EventEmitter } from "stream";
 import { AwaitedUnion } from "./types";
 // Buffers for converting numbers!
 export const float32Array = new Float32Array(1);
@@ -17,7 +18,7 @@ export const isBigEndian = uint8Float32ArrayView[0] === 64;
  */
 export function joinUint8Arrays(
   arrays: Uint8Array[],
-  totalLength?: number
+  totalLength?: number,
 ): Uint8Array {
   totalLength ??= arrays.reduce((acc, arr) => acc + arr.length, 0);
   const joined = new Uint8Array(totalLength);
@@ -34,10 +35,9 @@ export function joinUint8Arrays(
  * @param buffer The buffer to extend
  * @param isLe If to make the default endianness Little Endian
  */
-export function addDefaultEndianness<classType extends new (...args: any[]) => { isLe: boolean }>(
-  buffer: classType,
-  isLe: boolean
-): classType {
+export function addDefaultEndianness<
+  classType extends new (...args: any[]) => { isLe: boolean },
+>(buffer: classType, isLe: boolean): classType {
   return class extends buffer {
     constructor(...args: any[]) {
       super(...args);
@@ -51,9 +51,12 @@ export function addDefaultEndianness<classType extends new (...args: any[]) => {
  * @param awaiter The value to await (may not actually be a promise, if not returns value with no wrapping)
  * @param value The value to return
  */
-export function wrapForPromise<awaiter extends Promise<unknown> | unknown, value extends unknown>(
+export function wrapForPromise<
+  awaiter extends Promise<unknown> | unknown,
+  value extends unknown,
+>(
   awaiter: awaiter,
-  value: value
+  value: value,
 ): awaiter extends Promise<unknown> ? Promise<value> : value {
   if (awaiter instanceof Promise) {
     // @ts-ignore
@@ -71,11 +74,11 @@ export function wrapForPromise<awaiter extends Promise<unknown> | unknown, value
 export function wrapForAsyncCallArr<
   func extends (...args: args) => unknown,
   value extends unknown,
-  args extends unknown[]
+  args extends unknown[],
 >(
   func: func,
   params: args[],
-  value: value
+  value: value,
 ): ReturnType<func> extends Promise<unknown> ? Promise<value> : value {
   for (let index = 0; index < params.length; index++) {
     const output = func(...params[index]);
@@ -105,8 +108,8 @@ export function maybePromiseThen<maybePromise, returnType>(
   callback: (
     value: maybePromise extends Promise<unknown>
       ? Awaited<maybePromise>
-      : maybePromise
-  ) => returnType
+      : maybePromise,
+  ) => returnType,
 ): maybePromise extends Promise<unknown> ? Promise<returnType> : returnType {
   if (maybePromise instanceof Promise) {
     // @ts-ignore
@@ -125,7 +128,7 @@ export function maybePromiseThen<maybePromise, returnType>(
  */
 export function maybeAsyncCallArr<args extends unknown[], ret>(
   maybeAsyncFunc: (...args: args) => ret,
-  params: args[]
+  params: args[],
 ): ret extends Promise<unknown> ? Promise<AwaitedUnion<ret>[]> : ret[] {
   const outputs: ret[] = [];
   for (let index = 0; index < params.length; index++) {
@@ -143,4 +146,134 @@ export function maybeAsyncCallArr<args extends unknown[], ret>(
   }
   // @ts-ignore
   return outputs;
+}
+// @TODO: move to @chickenjdk/common
+export type SimpleEventListener<T, N> = (arg: T, name: N) => void;
+export type EventMap = { [name: string]: SimpleEventListener<any, any> };
+export type EventsStorage<M extends EventMap> = {
+  [T in keyof M]:
+    | {
+        type: "once" | "on";
+        callback: M[T];
+      }[]
+    | undefined;
+};
+
+export class SimpleEventEmitter<M extends EventMap = EventMap> {
+  #events: EventsStorage<M> = {} as any;
+  /**
+   * Append a one-time listener
+   * @param name Event name
+   * @param callback Callback
+   */
+  once<T extends Extract<keyof M, string>>(name: T, callback: M[T]) {
+    this.#events[name] ??= [];
+    this.#events[name].push({ type: "once", callback });
+  }
+  /**
+   * Append a listener
+   * @param name Event name
+   * @param callback Callback
+   */
+  on<T extends Extract<keyof M, string>>(name: T, callback: M[T]) {
+    this.#events[name] ??= [];
+    this.#events[name].push({ type: "on", callback });
+  }
+  /**
+   * Invoke all listeners for an event sequentially
+   * @param name The name of the event
+   * @param arg The argument to pass to the listeners
+   */
+  emit<T extends Extract<keyof M, string>>(name: T, arg: Parameters<M[T]>[0]) {
+    const listeners = this.#events[name];
+    if (listeners !== undefined) {
+      // Get array before once listeners are removed
+      const listenerSnapshot = listeners.slice();
+
+      // Purge once listeners
+      for (let index = 0; index < listeners.length; index++) {
+        const listener = listeners[index];
+        if (listener.type === "once") {
+          listeners.splice(index, 1);
+          index--;
+        }
+      }
+      // Call all listeners
+      for (let index = 0; index < listenerSnapshot.length; index++) {
+        const listener = listenerSnapshot[index];
+        listener.callback(arg, name);
+      }
+    }
+  }
+  /**
+   * Remove the first instance of a callback for an event
+   * @param name The event name
+   * @param callback The callback
+   */
+  removeListener<T extends Extract<keyof M, string>>(
+    name: T,
+    callback: SimpleEventListener<M[T], T>,
+  ) {
+    const listeners = this.#events[name];
+    if (listeners !== undefined) {
+      for (let index = 0; index < listeners.length; index++) {
+        const listener = listeners[index];
+        if (listener.callback === callback) {
+          listeners.splice(index, 1);
+          break;
+        }
+      }
+    }
+  }
+}
+
+export class LockQueue {
+  #queue: ((aborted: boolean, abortedError: Error | undefined) => void)[] = [];
+  #locked: boolean = false;
+  #closed: boolean = false;
+  #closedError: Error | undefined = undefined; // The error to throw when a lock acquisition is attempted and #closed is true
+  /**
+   * Acquire the lock
+   * @returns A promise that resolves when you have the lock, or rejects when the queue is closed
+   */
+  acquire() {
+    if (this.#closed) {
+      return Promise.reject(this.#closedError);
+    } else if (!this.#locked) {
+      // Return, as the queue is already empty
+      return Promise.resolve();
+    } else {
+      return new Promise<void>((resolve, reject) => {
+        this.#queue.push((aborted, abortedError) => {
+          if (aborted) {
+            reject(abortedError);
+          } else {
+            resolve();
+          }
+        });
+      });
+    }
+  }
+  /**
+   * Release the lock
+   */
+  release() {
+    this.#locked = false;
+    if (this.#queue.length > 0) {
+      this.#queue.shift()!(false, undefined);
+    }
+  }
+  /**
+   * Throw an error on all functions waiting for the lock, and throw another whenever an acquisition is attempted
+   * @param error The error to be thrown for all waiting for the lock
+   * @param acquireError The error to throw whenever anyone tries to acquire the lock
+   */
+  close(error: Error, acquireError: Error) {
+    this.#closedError = error;
+    for (const item of this.#queue) {
+      item(true, error);
+    }
+    // Free all listeners from queue to prevent possible leak
+    this.#queue = [];
+  }
 }

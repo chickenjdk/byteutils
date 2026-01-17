@@ -27,6 +27,7 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@chickenjdk/common": "^2.1.1",
     "mutf-8": "^1.2.0"
   }
 }
