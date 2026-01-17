@@ -21,6 +21,13 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
   get _buffered() {
     return this.#buffer;
   }
+  /**
+   * The chunk size.
+   * Set with .resize
+   */
+  get chunkSize() {
+    return this.#buffer.length
+  }
   abstract handleChunk(chunk: Uint8Array): MaybePromise<void, IsAsync>;
   /**
    * Take a non-uniform-size stream of Uint8Arrays, and join them together into uniform size Uint8Arrays
@@ -39,9 +46,8 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
    */
   _flush() {
     // May flush even if there is no data, but that is the caller's fault
-    const chunkSize = this.#buffer.length;
     const chunk = this.#buffer.subarray(0, this.#used);
-    this.#buffer = new Uint8Array(chunkSize);
+    this.#buffer = new Uint8Array(this.chunkSize);
     this.#used = 0;
     return wrapForPromise(
       this.handleChunk(chunk),
@@ -60,7 +66,7 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
         const handler = () => {
           const bytesToWrite = Math.min(
             bytesLeft,
-            this.#buffer.length - this.#used,
+            this.chunkSize - this.#used,
           );
           this.#buffer.set(
             data instanceof Array
@@ -72,7 +78,7 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
           index += bytesToWrite;
           bytesLeft -= bytesToWrite;
         };
-        if (this.#used >= this.#buffer.length) {
+        if (this.#used >= this.chunkSize) {
           return maybePromiseThen(this._flush(), handler);
         } else {
           handler();
@@ -89,7 +95,7 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
     const handler = () => {
       this.#buffer[this.#used++] = byte;
     };
-    if (this.#used >= this.#buffer.length) {
+    if (this.#used >= this.chunkSize) {
       return maybePromiseThen(this._flush(), handler);
     } else {
       handler();
