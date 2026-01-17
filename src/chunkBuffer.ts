@@ -19,7 +19,7 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
    * @private
    */
   get _buffered() {
-    return this.#buffer;
+    return this.#buffer.subarray(0, this.#used);
   }
   /**
    * The chunk size.
