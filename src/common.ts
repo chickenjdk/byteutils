@@ -1,5 +1,5 @@
 import { EventEmitter } from "stream";
-import { AwaitedUnion } from "./types";
+import { AwaitedUnion, MaybePromise } from "./types";
 // Buffers for converting numbers!
 export const float32Array = new Float32Array(1);
 export const uint8Float32ArrayView = new Uint8Array(float32Array.buffer);
@@ -46,6 +46,9 @@ export function addDefaultEndianness<
   };
 }
 // Promise helpers
+export function isThenable(value: any) {
+  return typeof value?.then === "function"
+}
 /**
  * Wrap a value for the completion of a promise
  * @param awaiter The value to await (may not actually be a promise, if not returns value with no wrapping)
@@ -58,7 +61,7 @@ export function wrapForPromise<
   awaiter: awaiter,
   value: value,
 ): awaiter extends Promise<unknown> ? Promise<value> : value {
-  if (awaiter instanceof Promise) {
+  if (isThenable(awaiter)) {
     // @ts-ignore
     return awaiter.then(() => value);
   } else {
@@ -82,7 +85,7 @@ export function wrapForAsyncCallArr<
 ): ReturnType<func> extends Promise<unknown> ? Promise<value> : value {
   for (let index = 0; index < params.length; index++) {
     const output = func(...params[index]);
-    if (output instanceof Promise) {
+    if (isThenable(output)) {
       // @ts-ignore
       return (async (params: args[]) => {
         await output;
@@ -111,7 +114,7 @@ export function maybePromiseThen<maybePromise, returnType>(
       : maybePromise,
   ) => returnType,
 ): maybePromise extends Promise<unknown> ? Promise<returnType> : returnType {
-  if (maybePromise instanceof Promise) {
+  if (isThenable(maybePromise)) {
     // @ts-ignore
     return maybePromise.then(callback);
   } else {
@@ -133,7 +136,7 @@ export function maybeAsyncCallArr<args extends unknown[], ret>(
   const outputs: ret[] = [];
   for (let index = 0; index < params.length; index++) {
     const output = maybeAsyncFunc(...params[index]);
-    if (output instanceof Promise) {
+    if (isThenable(output)) {
       // @ts-ignore
       return (async (params: args[]) => {
         outputs.push(await output);
@@ -146,6 +149,34 @@ export function maybeAsyncCallArr<args extends unknown[], ret>(
   }
   // @ts-ignore
   return outputs;
+}
+/**
+ * Like a while loop, but calls a callback each repetition.
+ * Returns a promise that resolves when the loop finishes if the callback is async,
+ * and runs normally if it is not async.
+ * Avoids stack overflow by using a loop, not recursive callbacks
+ * @param callback The callback to call.
+ * @param condition A function that returns true to keep the loop going, and false to stop it.
+ * @returns A promise if the function is async, or void if not
+ */
+export function maybeAsyncWhileLoop<Returns extends Promise<void> | void>(
+  callback: () => Returns,
+  condition: () => boolean,
+): Returns extends Promise<void> ? Promise<void> : void {
+  while (condition()) {
+    const result = callback();
+    if (isThenable(result)) {
+      // @ts-ignore
+      return (async () => {
+        await result;
+        while (condition()) {
+          await callback();
+        }
+      })();
+    }
+  }
+  // @ts-ignore
+  return;
 }
 // @TODO: move to @chickenjdk/common
 export type SimpleEventListener<T, N> = (arg: T, name: N) => void;
@@ -231,14 +262,14 @@ export class LockQueue {
   #queue: ((aborted: boolean, abortedError: Error | undefined) => void)[] = [];
   #locked: boolean = false;
   #closed: boolean = false;
-  #closedError: Error | undefined = undefined; // The error to throw when a lock acquisition is attempted and #closed is true
+  #acquireError: Error | undefined = undefined; // The error to throw when a lock acquisition is attempted and #closed is true
   /**
    * Acquire the lock
    * @returns A promise that resolves when you have the lock, or rejects when the queue is closed
    */
   acquire() {
     if (this.#closed) {
-      return Promise.reject(this.#closedError);
+      return Promise.reject(this.#acquireError);
     } else if (!this.#locked) {
       // Return, as the queue is already empty
       return Promise.resolve();
@@ -269,7 +300,7 @@ export class LockQueue {
    * @param acquireError The error to throw whenever anyone tries to acquire the lock
    */
   close(error: Error, acquireError: Error) {
-    this.#closedError = error;
+    this.#acquireError = acquireError;
     for (const item of this.#queue) {
       item(true, error);
     }
