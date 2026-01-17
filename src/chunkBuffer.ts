@@ -5,7 +5,7 @@ import {
   SimpleEventListener,
   wrapForPromise,
 } from "./common";
-import { MaybePromise } from "./types";
+import { CouldBePossiblyPromise, MaybePromise } from "./types";
 
 export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
   #buffer: Uint8Array;
@@ -58,7 +58,7 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
    * Write a Uint8Array or array
    * @param data The data to write
    */
-  write(data: Uint8Array | number[]) {
+  write(data: Uint8Array | number[]): CouldBePossiblyPromise<void, IsAsync> {
     let bytesLeft = data.length;
     let index = 0;
     return maybeAsyncWhileLoop(
@@ -85,18 +85,18 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
         }
       },
       () => bytesLeft > 0,
-    );
+    ) as CouldBePossiblyPromise<void, IsAsync>;
   }
   /**
    * Write a single byte
    * @param byte the byte
    */
-  push(byte: number) {
+  push(byte: number): CouldBePossiblyPromise<void, IsAsync> {
     const handler = () => {
       this.#buffer[this.#used++] = byte;
     };
     if (this.#used >= this.chunkSize) {
-      return maybePromiseThen(this._flush(), handler);
+      return maybePromiseThen(this._flush(), handler) as MaybePromise<void, IsAsync>;
     } else {
       handler();
     }
