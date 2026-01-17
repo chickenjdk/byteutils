@@ -46,8 +46,9 @@ export function addDefaultEndianness<
   };
 }
 // Promise helpers
-export function isThenable(value: any) {
-  return typeof value?.then === "function"
+export function isThenable(value: any): value is PromiseLike<unknown> {
+  // @ts-ignore
+  return typeof value?.then === "function";
 }
 /**
  * Wrap a value for the completion of a promise
@@ -60,7 +61,7 @@ export function wrapForPromise<
 >(
   awaiter: awaiter,
   value: value,
-): awaiter extends Promise<unknown> ? Promise<value> : value {
+): awaiter extends PromiseLike<unknown> ? Promise<value> : value {
   if (isThenable(awaiter)) {
     // @ts-ignore
     return awaiter.then(() => value);
@@ -106,14 +107,17 @@ export function wrapForAsyncCallArr<
  * @returns Whet the callback returns, if the input is a promise, it will return a promise that resolves to the value returned by the callback.
  * If the input is not a promise, it will return the value returned by the callback directly.
  */
-export function maybePromiseThen<maybePromise, returnType>(
+export function maybePromiseThen<
+  maybePromise extends Promise<unknown> | unknown,
+  returnType,
+>(
   maybePromise: maybePromise,
   callback: (
-    value: maybePromise extends Promise<unknown>
+    value: maybePromise extends PromiseLike<unknown>
       ? Awaited<maybePromise>
       : maybePromise,
   ) => returnType,
-): maybePromise extends Promise<unknown> ? Promise<returnType> : returnType {
+): maybePromise extends PromiseLike<unknown> ? Promise<returnType> : returnType {
   if (isThenable(maybePromise)) {
     // @ts-ignore
     return maybePromise.then(callback);
