@@ -57,7 +57,6 @@ export class readableStream extends readableBufferBaseAsync {
       this.events.emit("data", undefined);
     });
     this.#stream.on("close", () => {
-      console.log("ENDED STREAM")
       this.destroyed = true;
       // Abort all listeners because there is no more data
       this.#lock.close(
