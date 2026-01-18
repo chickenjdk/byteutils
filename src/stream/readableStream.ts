@@ -59,10 +59,6 @@ export class readableStream extends readableBufferBaseAsync {
     this.#stream.on("close", () => {
       this.destroyed = true;
       // Abort all listeners because there is no more data
-      this.#lock.close(
-        new StreamEndedError("Stream ended before data was received"),
-        new StreamEndedError("Stream is closed"),
-      );
       this.events.emit("close", undefined);
     });
   }
@@ -79,15 +75,17 @@ export class readableStream extends readableBufferBaseAsync {
     }
     const makeEndError = () =>
       new StreamEndedError("Stream ended before data was received");
-    if (this.destroyed) {
-      throw makeEndError();
-    }
+
     if (this.#chunkQueue.length === 0) {
-      // No chunks currently
-      return new Promise((resolve, reject) => {
-        this.events.once("data", resolve);
-        this.events.once("close", () => reject(makeEndError()));
-      });
+      if (this.destroyed) {
+        throw makeEndError();
+      } else {
+        // No chunks currently
+        return new Promise((resolve, reject) => {
+          this.events.once("data", resolve);
+          this.events.once("close", () => reject(makeEndError()));
+        });
+      }
     }
   }
   async shift(): Promise<number> {
