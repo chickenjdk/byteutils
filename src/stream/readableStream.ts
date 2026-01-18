@@ -11,7 +11,7 @@ import { StreamEndedError } from "./errors";
 type readableStreamEventMap = {
   data: SimpleEventListener<undefined, "data">;
   drain: SimpleEventListener<undefined, "data">;
-  end: SimpleEventListener<undefined, "end">;
+  close: SimpleEventListener<undefined, "close">;
 };
 export class readableStream extends readableBufferBaseAsync {
   #stream: Readable;
@@ -56,13 +56,15 @@ export class readableStream extends readableBufferBaseAsync {
       this.drained = false;
       this.events.emit("data", undefined);
     });
-    this.#stream.on("end", () => {
+    this.#stream.on("close", () => {
+      console.log("ENDED STREAM")
       this.destroyed = true;
       // Abort all listeners because there is no more data
       this.#lock.close(
         new StreamEndedError("Stream ended before data was received"),
         new StreamEndedError("Stream is closed"),
       );
+      this.events.emit("close", undefined);
     });
   }
   // Handle the hard parts of waiting for data
@@ -76,13 +78,16 @@ export class readableStream extends readableBufferBaseAsync {
       this.#chunkIdx = 0;
       this.#chunkQueue.shift();
     }
+    const makeEndError = () =>
+      new StreamEndedError("Stream ended before data was received");
+    if (this.destroyed) {
+      throw makeEndError();
+    }
     if (this.#chunkQueue.length === 0) {
       // No chunks currently
       return new Promise((resolve, reject) => {
         this.events.once("data", resolve);
-        this.events.once("end", () =>
-          reject(new StreamEndedError("Stream ended before data was received")),
-        );
+        this.events.once("close", () => reject(makeEndError()));
       });
     }
   }
