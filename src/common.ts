@@ -117,7 +117,9 @@ export function maybePromiseThen<
       ? Awaited<maybePromise>
       : maybePromise,
   ) => returnType,
-): maybePromise extends PromiseLike<unknown> ? Promise<returnType> : returnType {
+): maybePromise extends PromiseLike<unknown>
+  ? Promise<returnType>
+  : returnType {
   if (isThenable(maybePromise)) {
     // @ts-ignore
     return maybePromise.then(callback);
@@ -268,6 +270,12 @@ export class LockQueue {
   #closed: boolean = false;
   #acquireError: Error | undefined = undefined; // The error to throw when a lock acquisition is attempted and #closed is true
   /**
+   * If the queue is closed
+   */
+  get closed() {
+    return this.#closed;
+  }
+  /**
    * Acquire the lock
    * @returns A promise that resolves when you have the lock, or rejects when the queue is closed
    */
@@ -304,6 +312,7 @@ export class LockQueue {
    * @param acquireError The error to throw whenever anyone tries to acquire the lock
    */
   close(error: Error, acquireError: Error) {
+    this.#closed = true;
     this.#acquireError = acquireError;
     for (const item of this.#queue) {
       item(true, error);
