@@ -77,6 +77,8 @@ export class readableStream extends readableBufferBaseAsync {
       new StreamEndedError("Stream ended before data was received");
 
     if (this.#chunkQueue.length === 0) {
+      this.events.emit("drain", undefined); // Mark as drained. Marking as not drained is handled in the constructors .on data handler
+      this.drained = true;
       if (this.destroyed) {
         throw makeEndError();
       } else {
