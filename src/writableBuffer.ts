@@ -11,6 +11,7 @@ import {
   wrapForAsyncCallArr,
 } from "./common";
 import { uint8ArrayLike, cloneFunc, MaybePromise, mergeValues } from "./types";
+import { ChunkTransformerWithDataCallback } from "./chunkBuffer";
 const constants = {
   // 11111111111111111111111111111111
   allOnes: 0xffffffff,
@@ -21,7 +22,7 @@ const constants = {
 };
 // Returns not typed for non-abstract/abstract alias methods
 export abstract class writableBufferBase<
-  IsAsync extends boolean = true | false
+  IsAsync extends boolean = true | false,
 > {
   // Methods to implement
   /**
@@ -41,7 +42,7 @@ export abstract class writableBufferBase<
    * Write a Uint8Array to the buffer backward (last byte first written to the end[LE])
    */
   abstract writeUint8ArrayBackwards(
-    value: Uint8Array
+    value: Uint8Array,
   ): MaybePromise<void, IsAsync>;
   /**
    * Push a byte (numbers 0-255) to the buffer's end
@@ -63,7 +64,7 @@ export abstract class writableBufferBase<
     | cloneFunc<typeof this.writeArray>
     | cloneFunc<typeof this.writeArrayBackwards> = this.writeArray;
   /**
-   * Write data to the buffer backwards (writes data that was originally in LE format to the endianness of the buffer, I know that "backwards" is a little opinionated but the class was origionaly BE-only and I did not want to change too mutch)
+   * Write data to the buffer backwards (writes data that was originally in LE format to the endianness of the buffer, I know that "backwards" is a little opinionated but the class was originally BE-only and I did not want to change too much)
    * @param value The data to write
    */
   writeArrayBackwardsEndian:
@@ -167,7 +168,7 @@ export abstract class writableBufferBase<
    * @remarks
    * This function calculates the minimum number of bytes needed to represent an two's complement in binary format.
    * It uses the `Math.clz32` function to count the number of leading zeros in the binary representation of the value.
-   * It subtracts this from 33 (equivilent to the number of bits in the two's complement +1 to account for the sign) to get the number of bits needed.
+   * It subtracts this from 33 (equivalent to the number of bits in the two's complement +1 to account for the sign) to get the number of bits needed.
    * The result is rounded up to the nearest byte.
    * @param value The value to check
    * @returns The calculated minimum length in bytes
@@ -189,9 +190,9 @@ export abstract class writableBufferBase<
         value < 0
           ? ((constants.allOnes >>> ((4 - bytes) * 8)) & value) >>> 0
           : value,
-        bytes
+        bytes,
       ),
-      bytes
+      bytes,
     );
   }
   /**
@@ -204,9 +205,9 @@ export abstract class writableBufferBase<
     return wrapForPromise(
       this.writeUnsignedIntBigint(
         value < 0n ? ~(-1n << BigInt(bytes * 8)) & value : value,
-        bytes
+        bytes,
       ),
-      bytes
+      bytes,
     );
   }
   /**
@@ -226,7 +227,7 @@ export abstract class writableBufferBase<
     return wrapForAsyncCallArr(
       this.writeTwosComplementByte.bind(this),
       values.map((value) => [value]),
-      values.length
+      values.length,
     );
   }
   /**
@@ -240,12 +241,12 @@ export abstract class writableBufferBase<
     if (isBigEndian) {
       return wrapForPromise(
         this.writeUint8ArrayEndian(uint8Float32ArrayView),
-        4
+        4,
       );
     } else {
       return wrapForPromise(
         this.writeUint8ArrayBackwardsEndian(uint8Float32ArrayView),
-        4
+        4,
       );
     }
   }
@@ -259,12 +260,12 @@ export abstract class writableBufferBase<
     if (isBigEndian) {
       return wrapForPromise(
         this.writeUint8ArrayEndian(uint8Float64ArrayView),
-        8
+        8,
       );
     } else {
       return wrapForPromise(
         this.writeUint8ArrayBackwardsEndian(uint8Float64ArrayView),
-        8
+        8,
       );
     }
   }
@@ -313,9 +314,9 @@ export abstract class writableBufferBase<
           ? (value - 1) & (constants.allOnes >>> (32 - bytes * 8))
           : // Rely on the user not to use to big of a value
             value /* & (constants.allOnes >>> (32 - bytes * 8))*/,
-        bytes
+        bytes,
       ),
-      bytes
+      bytes,
     );
   }
   /**
@@ -331,9 +332,9 @@ export abstract class writableBufferBase<
           ? (value - 1n) & ~(-1n << BigInt(32 - bytes * 8))
           : // Rely on the user not to use to big of a value
             value /* & (constants.allOnes >>> (32 - bytes * 8))*/,
-        bytes
+        bytes,
       ),
-      bytes
+      bytes,
     );
   }
   /**
@@ -353,7 +354,7 @@ export abstract class writableBufferBase<
     return wrapForAsyncCallArr(
       this.writeSignedOnesComplementByte.bind(this),
       values.map((value) => [value]),
-      values.length
+      values.length,
     );
   }
   /**
@@ -363,7 +364,7 @@ export abstract class writableBufferBase<
    * @remarks
    * This function calculates the minimum number of bytes needed to represent a signed integer in binary format.
    * It uses the `Math.clz32` function to count the number of leading zeros in the binary representation of the value.
-   * It subtracts this from 33 (equivilent to the number of bits in the signed integer +1 to account for the sign) to get the number of bits needed.
+   * It subtracts this from 33 (equivalent to the number of bits in the signed integer +1 to account for the sign) to get the number of bits needed.
    * The result is rounded up to the nearest byte.
    * @param value The value to check
    * @returns The calculated minimum length in bytes
@@ -388,9 +389,9 @@ export abstract class writableBufferBase<
           ? // Rely on the user not to use to big of a value
             absValue | (1 << (bits - 1)) // & (constants.allOnes >>> (32 - bits))
           : value,
-        bytes
+        bytes,
       ),
-      bytes
+      bytes,
     );
   }
   /**
@@ -408,9 +409,9 @@ export abstract class writableBufferBase<
           ? // Rely on the user not to use to big of a value
             -value | (1n << (bits - 1n)) // & ~(-1n << bits)
           : value,
-        bytes
+        bytes,
       ),
-      bytes
+      bytes,
     );
   }
   /**
@@ -421,7 +422,7 @@ export abstract class writableBufferBase<
   writeSignedIntegerByte(value: number) {
     return wrapForPromise(
       this.push(value < 0 ? 0b10000000 | -value : value),
-      1
+      1,
     );
   }
   /**
@@ -433,7 +434,7 @@ export abstract class writableBufferBase<
     return wrapForAsyncCallArr(
       this.writeSignedIntegerByte.bind(this),
       values.map((value) => [value]),
-      values.length
+      values.length,
     );
   }
 }
@@ -455,28 +456,40 @@ export class writableBuffer
   extends writableBufferBase<false>
   implements writableBufferStorage
 {
-  #chunkSize: number;
+  #chunkSplitter: ChunkTransformerWithDataCallback<false>;
+
+  #chunkSplitterCallback(data: Uint8Array) {
+    this.#buffers.push(data);
+  }
   #buffers: Uint8Array[];
-  #used: number = 0;
   get buffer(): Uint8Array {
     return joinUint8Arrays(
-      [
-        ...this.#buffers.slice(1),
-        this.#buffers[0].subarray(0, this.#used),
-      ],
-      this.length
+      [...this.#buffers, this.#chunkSplitter._buffered],
+      this.length,
     );
   }
   set buffer(value: uint8ArrayLike | writableBufferStorage) {
     if (
       value instanceof writableBuffer &&
-      value.#chunkSize === this.#chunkSize
+      value.#chunkSplitter.chunkSize === this.#chunkSplitter.chunkSize
     ) {
-      this.#buffers = value.#buffers;
-      this.#used = value.#used;
+      // Copy everything over
+      this.#buffers = [];
+      const oldChunkSplitter = this.#chunkSplitter;
+      this.#chunkSplitter = new ChunkTransformerWithDataCallback(
+        oldChunkSplitter._buffered.length,
+        this.#chunkSplitterCallback.bind(this),
+      );
+      this.#chunkSplitter.write(value.#chunkSplitter._buffered);
+      this.#buffers.push(...value.#buffers);
     } else {
-      this.#buffers = [new Uint8Array(this.#chunkSize)];
-      this.#used = 0;
+      this.#buffers = [];
+      const oldChunkSplitter = this.#chunkSplitter;
+      this.#chunkSplitter = new ChunkTransformerWithDataCallback(
+        oldChunkSplitter._buffered.length,
+        this.#chunkSplitterCallback.bind(this),
+      );
+
       if (value instanceof writableBufferBase) {
         // Processing goes into getting this value, so don't grab it twice
         const buffer = value.buffer;
@@ -488,69 +501,36 @@ export class writableBuffer
       this.writeUint8Array(
         value instanceof Uint8Array
           ? value
-          : new Uint8Array(value as uint8ArrayLike)
+          : new Uint8Array(value as uint8ArrayLike),
       );
     }
   }
   get length() {
     return (
-      this.#chunkSize * this.#buffers.length - (this.#chunkSize - this.#used)
+      this.#chunkSplitter.chunkSize * this.#buffers.length +
+      this.#chunkSplitter.length
     );
   }
   constructor(chunkSize: number = 2000) {
     super();
-    this.#chunkSize = chunkSize;
-    this.#buffers = [new Uint8Array(chunkSize)];
+    this.#chunkSplitter = new ChunkTransformerWithDataCallback(chunkSize, this.#chunkSplitterCallback.bind(this))
+    this.#buffers = [];
   }
   push(value: number) {
-    if (this.#used === this.#chunkSize) {
-      this.#used = 0;
-      this.#buffers.unshift(new Uint8Array(this.#chunkSize));
-    }
-    this.#buffers[0][this.#used++] = value;
+    this.#chunkSplitter.push(value);
   }
-  writeUint8Array(value: Uint8Array): void {
-    let bytesLeft = value.length;
-    let index = 0;
-    while (bytesLeft > 0) {
-      if (this.#used === this.#chunkSize) {
-        this.#used = 0;
-        this.#buffers.unshift(new Uint8Array(this.#chunkSize));
-      }
-      const bytesToWrite = Math.min(bytesLeft, this.#chunkSize - this.#used);
-      this.#buffers[0].set(
-        value.subarray(index, index + bytesToWrite),
-        this.#used
-      );
-      this.#used += bytesToWrite;
-      index += bytesToWrite;
-      bytesLeft -= bytesToWrite;
-    }
+  writeUint8Array(value: Uint8Array) {
+    this.#chunkSplitter.write(value);
   }
-  writeUint8ArrayBackwards(value: Uint8Array): void {
+  writeUint8ArrayBackwards(value: Uint8Array) {
     // Don't mutate the original value
-    this.writeUint8Array(value.slice(0).reverse());
+    return this.writeUint8Array(value.slice(0).reverse());
   }
   writeArray(value: number[]) {
-    let bytesLeft = value.length;
-    let index = 0;
-    while (bytesLeft > 0) {
-      if (this.#used === this.#chunkSize) {
-        this.#used = 0;
-        this.#buffers.unshift(new Uint8Array(this.#chunkSize));
-      }
-      const bytesToWrite = Math.min(bytesLeft, this.#chunkSize - this.#used);
-      this.#buffers[0].set(
-        value.slice(index, index + bytesToWrite),
-        this.#used
-      );
-      this.#used += bytesToWrite;
-      index += bytesToWrite;
-      bytesLeft -= bytesToWrite;
-    }
+    this.#chunkSplitter.write(value);
   }
   writeArrayBackwards(value: number[]) {
-    this.writeArray(value.slice(0).reverse());
+    return this.writeArray(value.slice(0).reverse());
   }
 }
 /**
@@ -571,7 +551,7 @@ export class writableBufferFixedSize
   set buffer(value: uint8ArrayLike | writableBufferStorage) {
     if (value.length > this.#buffer.length) {
       throw new Error(
-        "Buffer does not have capacity to fit the new buffer's contents"
+        "Buffer does not have capacity to fit the new buffer's contents",
       );
     }
     // Don't check for writableBufferFixedSize because copying the buffer is what we do anyway and using the same one can result in issues if both instances are used
@@ -625,7 +605,7 @@ export class writableBufferFixedSize
     this.#used += value.length;
   }
   writeUint8ArrayBackwards(value: Uint8Array): void {
-    // Don't mutate the origional value
+    // Don't mutate the original value
     this.writeUint8Array(value.slice(0).reverse());
   }
   writeArray(value: number[]) {
@@ -636,7 +616,7 @@ export class writableBufferFixedSize
     this.#used += value.length;
   }
   writeArrayBackwards(value: number[]) {
-    // Don't mutate the origional value
+    // Don't mutate the original value
     this.writeArray(value.slice(0).reverse());
   }
   writeWriteableBuffer(value: writableBufferStorage) {
@@ -652,5 +632,5 @@ export class writableBufferFixedSize
  */
 export const writableBufferFixedSizeLE = addDefaultEndianness(
   writableBufferFixedSize,
-  true
+  true,
 );

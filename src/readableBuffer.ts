@@ -19,7 +19,7 @@ const constants = {
   allOnesButLastByte: 0xffffff00,
 };
 export abstract class readableBufferBase<
-  IsAsync extends boolean = true | false
+  IsAsync extends boolean = true | false,
 > {
   // Methods to implement
   /**
@@ -36,7 +36,7 @@ export abstract class readableBufferBase<
    * @param bytes How many bytes to read
    */
   abstract readUint8ArrayBackwards(
-    bytes: number
+    bytes: number,
   ): MaybePromise<Uint8Array, IsAsync>;
   /**
    * Read a ReadableBuffer from the start of the buffer
@@ -45,7 +45,7 @@ export abstract class readableBufferBase<
   readReadableBuffer(bytes: number) {
     return maybePromiseThen(
       this.readUint8Array(bytes),
-      (read) => new readableBuffer(read)
+      (read) => new readableBuffer(read),
     );
   }
   /**
@@ -204,7 +204,7 @@ export abstract class readableBufferBase<
    */
   readTwosComplementByte() {
     return maybePromiseThen(this.shift(), (byte) =>
-      byte & 0b10000000 ? byte | constants.allOnesButLastByte : byte
+      byte & 0b10000000 ? byte | constants.allOnesButLastByte : byte,
     );
   }
   /**
@@ -215,7 +215,7 @@ export abstract class readableBufferBase<
   readTwosComplementByteArray(bytes: number) {
     return maybeAsyncCallArr(
       this.readTwosComplementByte.bind(this),
-      Array(bytes).fill([])
+      Array(bytes).fill([]),
     );
   }
   /**
@@ -261,11 +261,11 @@ export abstract class readableBufferBase<
   readString(bytes: number, mutf8: boolean = false) {
     if (mutf8 === true) {
       return maybePromiseThen(this.readUint8ArrayEndian(bytes), (read) =>
-        decodeMutf8(read)
+        decodeMutf8(read),
       );
     }
     return maybePromiseThen(this.readUint8ArrayEndian(bytes), (read) =>
-      decodeUtf8(read)
+      decodeUtf8(read),
     );
   }
   /**
@@ -292,10 +292,12 @@ export abstract class readableBufferBase<
    */
   readSignedOnesComplementBigint(bytes: number) {
     const bits = BigInt(bytes * 8);
-    return maybePromiseThen(this.readUnsignedIntBigint(bytes), (read: bigint) =>
-      (read & (1n << (bits - 1n))) !== 0n
-        ? -(~read & ~(-1n << (bits - 1n)))
-        : read
+    return maybePromiseThen(
+      this.readUnsignedIntBigint(bytes),
+      (read: bigint) =>
+        (read & (1n << (bits - 1n))) !== 0n
+          ? -(~read & ~(-1n << (bits - 1n)))
+          : read,
     );
   }
   /**
@@ -305,7 +307,7 @@ export abstract class readableBufferBase<
   readSignedOnesComplementByte() {
     // Possible: We invert the bits then 0 the first bit if the original has the first bit as one, so the removal of the first bit is kind of useless. (By first bit I mean 0b10000000)
     return maybePromiseThen(this.shift(), (byte) =>
-      byte & 0b10000000 ? -(~byte & 0b01111111) : byte
+      byte & 0b10000000 ? -(~byte & 0b01111111) : byte,
     );
   }
   /**
@@ -316,7 +318,7 @@ export abstract class readableBufferBase<
   readSignedOnesComplementByteArray(bytes: number) {
     return maybeAsyncCallArr(
       this.readSignedOnesComplementByte.bind(this),
-      Array(bytes).fill([])
+      Array(bytes).fill([]),
     );
   }
   /**
@@ -349,7 +351,7 @@ export abstract class readableBufferBase<
    */
   readSignedIntegerByte() {
     return maybePromiseThen(this.shift(), (byte) =>
-      byte & 0b10000000 ? -(byte & 0b01111111) : byte & 0b01111111
+      byte & 0b10000000 ? -(byte & 0b01111111) : byte & 0b01111111,
     );
   }
   /**
@@ -359,7 +361,7 @@ export abstract class readableBufferBase<
   readSignedIntegerByteArray(bytes: number) {
     return maybeAsyncCallArr(
       this.readSignedIntegerByte.bind(this),
-      Array(bytes).fill([])
+      Array(bytes).fill([]),
     );
   }
 }
@@ -426,14 +428,14 @@ export class readableBuffer extends readableBufferBase<false> {
     }
     // This uses the same memory for the new readableBuffer
     return new readableBuffer(
-      this.#buffer.subarray(this.#index, (this.#index += bytes))
+      this.#buffer.subarray(this.#index, (this.#index += bytes)),
     );
   }
   readArray(bytes: number): number[] {
     const output = Array.prototype.slice.call(
       this.#buffer,
       this.#index,
-      (this.#index += bytes)
+      (this.#index += bytes),
     );
     if (output.length !== bytes) {
       throw new RangeError("readableBuffer out of bounds");
