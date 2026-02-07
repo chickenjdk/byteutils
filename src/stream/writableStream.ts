@@ -1,11 +1,12 @@
-import { addDefaultEndianness} from "../common";
-import {writableBufferBase } from "../writableBuffer";
+import { ChunkTransformerWithDataCallback } from "../chunkBuffer";
+import { addDefaultEndianness } from "../common";
+import { writableBufferBase } from "../writableBuffer";
 import { Writable } from "stream";
 export class writableStream extends writableBufferBase<true> {
   #stream: Writable;
   /**
    * Write binary encoded data to a stream.
-   * Writes each write to the stream immeditly, no matter the size of the data.
+   * Writes each write to the stream immediately, no matter the size of the data.
    * For this reason, for high speed/bandwidth, it is recommended to use `chunkingWritableStream` to prevent memory issues with large writes and spamming the stream.
    * This is accomplished by writing data with predictably sized chunks, regardless of how small or large the writes are.
    * @param stream The stream to write to.
@@ -52,15 +53,13 @@ export class writableStream extends writableBufferBase<true> {
 }
 /**
  * Little-endian version of writableStream
- * @remarks You can generate this class yourself with `addDefaultEndianness(cwritableStream, true)` or make a already created instance little endian via `instance.isLe = true`
+ * @remarks You can generate this class yourself with `addDefaultEndianness(writableStream, true)` or make a already created instance little endian via `instance.isLe = true`
  */
 export const writableStreamLE = addDefaultEndianness(writableStream, true);
 
 export class chunkingWritableStream extends writableBufferBase<true> {
-  #chunkSize: number;
+  #chunkSplitter: ChunkTransformerWithDataCallback<true>;
   #stream: Writable;
-  // Always get the buffer's length to allow safely changing chunkSIze
-  #buffer: Uint8Array;
   #used: number = 0;
   /**
    * The stream we are writing to.
@@ -76,7 +75,7 @@ export class chunkingWritableStream extends writableBufferBase<true> {
    * @default 2000
    */
   get chunkSize(): number {
-    return this.#chunkSize;
+    return this.#chunkSplitter._buffered.length;
   }
   /**
    * Change the chunk size of the stream.
@@ -84,19 +83,7 @@ export class chunkingWritableStream extends writableBufferBase<true> {
    * @param value The new chunk size to set.
    */
   async setChunkSize(value: number) {
-    this.#chunkSize = value;
-    if (this.#used < value) {
-      // If the new chunk size is larger, we can just copy the old buffer to the new one
-      const oldBuffer = this.#buffer;
-
-      this.#buffer = new Uint8Array(value);
-      this.#buffer.set(oldBuffer.subarray(0, this.#used), 0);
-    } else if (this.#used > value) {
-      // Not enough space in the buffer, so we need to flush it
-      // This will do one last write in the old chunk size, but who cares?
-      await this.flush();
-      this.#buffer = new Uint8Array(this.#chunkSize);
-    }
+    this.#chunkSplitter.resize(value);
   }
   /**
    * Write to the stream in predictable sized chunks.
@@ -110,28 +97,20 @@ export class chunkingWritableStream extends writableBufferBase<true> {
   constructor(stream: Writable, chunkSize: number = 2000) {
     super();
     this.#stream = stream;
-    this.#chunkSize = chunkSize;
-    this.#buffer = new Uint8Array(chunkSize);
-  }
-  /**
-   * Flush the buffer to the stream. Not public because users should not be trusting the buffer to be full.
-   * This is used internally to ensure that the buffer is flushed when it is full.
-   * It writes the entire buffer to the stream and resets the buffer.
-   * @private
-   * @returns A promise that resolves when the buffer is flushed.
-   */
-  #flushFull(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.#stream.write(this.#buffer, (err) => {
-        this.#used = 0;
-        this.#buffer.fill(0);
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
+    this.#chunkSplitter = new ChunkTransformerWithDataCallback<true>(
+      chunkSize,
+      (chunk) => {
+        return new Promise<void>((resolve, reject) => {
+          this.#stream.write(chunk, (err) => {
+            if (err === null || err === undefined) {
+              resolve();
+            } else {
+              reject(err);
+            }
+          });
+        });
+      },
+    );
   }
   /**
    * Flush the buffer to the stream.
@@ -144,61 +123,20 @@ export class chunkingWritableStream extends writableBufferBase<true> {
     if (this.#used === 0) {
       return Promise.resolve();
     }
-    return new Promise((resolve, reject) => {
-      this.#stream.write(this.#buffer.subarray(0, this.#used), (err) => {
-        this.#used = 0;
-        this.#buffer.fill(0); // Reset the buffer to zeroes
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
+    return this.#chunkSplitter.flush();
   }
   async push(value: number) {
-    if (this.#used === this.#buffer.length) {
-      await this.#flushFull();
-    }
-    this.#buffer[this.#used++] = value;
+    this.#chunkSplitter.push(value);
   }
   async writeUint8Array(value: Uint8Array) {
-    let bytesLeft = value.length;
-    let index = 0;
-    while (bytesLeft > 0) {
-      if (this.#used === this.#buffer.length) {
-        await this.#flushFull();
-      }
-      const bytesToWrite = Math.min(
-        bytesLeft,
-        this.#buffer.length - this.#used
-      );
-      this.#buffer.set(value.subarray(index, index + bytesToWrite), this.#used);
-      this.#used += bytesToWrite;
-      index += bytesToWrite;
-      bytesLeft -= bytesToWrite;
-    }
+    this.#chunkSplitter.write(value);
   }
   writeUint8ArrayBackwards(value: Uint8Array) {
-    // Don't mutate the origional value
+    // Don't mutate the original value
     return this.writeUint8Array(value.slice(0).reverse());
   }
   async writeArray(value: number[]) {
-    let bytesLeft = value.length;
-    let index = 0;
-    while (bytesLeft > 0) {
-      if (this.#used === this.#buffer.length) {
-        await this.#flushFull();
-      }
-      const bytesToWrite = Math.min(
-        bytesLeft,
-        this.#buffer.length - this.#used
-      );
-      this.#buffer.set(value.slice(index, index + bytesToWrite), this.#used);
-      this.#used += bytesToWrite;
-      index += bytesToWrite;
-      bytesLeft -= bytesToWrite;
-    }
+    this.#chunkSplitter.write(value);
   }
   writeArrayBackwards(value: number[]) {
     return this.writeArray(value.slice(0).reverse());
@@ -210,5 +148,5 @@ export class chunkingWritableStream extends writableBufferBase<true> {
  */
 export const chunkingWritableStreamLE = addDefaultEndianness(
   chunkingWritableStream,
-  true
+  true,
 );
