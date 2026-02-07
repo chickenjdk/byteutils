@@ -47,7 +47,6 @@ export function addDefaultEndianness<
 }
 // Promise helpers
 export function isThenable(value: any): value is PromiseLike<unknown> {
-  // @ts-ignore
   return typeof value?.then === "function";
 }
 /**
@@ -83,7 +82,7 @@ export function wrapForAsyncCallArr<
   func: func,
   params: args[],
   value: value,
-): ReturnType<func> extends Promise<unknown> ? Promise<value> : value {
+): ReturnType<func> extends PromiseLike<unknown> ? Promise<value> : value {
   for (let index = 0; index < params.length; index++) {
     const output = func(...params[index]);
     if (isThenable(output)) {
@@ -138,7 +137,7 @@ export function maybePromiseThen<
 export function maybeAsyncCallArr<args extends unknown[], ret>(
   maybeAsyncFunc: (...args: args) => ret,
   params: args[],
-): ret extends Promise<unknown> ? Promise<AwaitedUnion<ret>[]> : ret[] {
+): ret extends PromiseLike<unknown> ? Promise<AwaitedUnion<ret>[]> : ret[] {
   const outputs: ret[] = [];
   for (let index = 0; index < params.length; index++) {
     const output = maybeAsyncFunc(...params[index]);
