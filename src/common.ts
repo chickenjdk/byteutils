@@ -1,5 +1,7 @@
 import { EventEmitter } from "stream";
 import { AwaitedUnion, MaybePromise } from "./types";
+import { log } from "@chickenjdk/common";
+import { ExpectedAsyncError, ExpectedSyncError } from "./errors";
 // Buffers for converting numbers!
 export const float32Array = new Float32Array(1);
 export const uint8Float32ArrayView = new Uint8Array(float32Array.buffer);
@@ -70,7 +72,37 @@ export function wrapForPromise<
   }
 }
 /**
- * Wrap a value for the completion of a promise
+ * Wrap a value for the completion of a promise, or a non-promise based on the async param
+ */
+export function wrapForPromiseKnown<IsAsync extends boolean, V>(
+  awaiter: MaybePromise<any, IsAsync>,
+  value: V,
+  async: IsAsync,
+) {
+  if (async) {
+    return (async () => {
+      if (!isThenable(awaiter)) {
+        log(
+          "warning",
+          new ExpectedAsyncError(
+            "Expected an async value, but got a sync value",
+          ),
+        );
+      }
+      await awaiter;
+      return value;
+    })();
+  } else {
+    if (isThenable(awaiter)) {
+      throw new ExpectedSyncError(
+        "Expected a sync value but got an async value",
+      );
+    }
+    return value;
+  }
+}
+/**
+ * Like maybeAsyncCallArr, but it outputs a wrapped version of value, not the results of the function calls.
  * @param awaiter The value to await (may not actually be a promise, if not returns value with no wrapping)
  * @param value The value to return
  */
@@ -83,21 +115,35 @@ export function wrapForAsyncCallArr<
   params: args[],
   value: value,
 ): ReturnType<func> extends PromiseLike<unknown> ? Promise<value> : value {
-  for (let index = 0; index < params.length; index++) {
-    const output = func(...params[index]);
-    if (isThenable(output)) {
-      // @ts-ignore
-      return (async (params: args[]) => {
-        await output;
-        for (const value of params) {
-          await func(...value);
-        }
-        return value;
-      })(params.slice(index));
-    }
-  }
   // @ts-ignore
-  return value;
+  return wrapForPromise(maybeAsyncCallArr(func, params), value);
+}
+/**
+ * Like knownAsyncCallArr, but it outputs a wrapped version of value, not the results of the function calls.
+ * @param func The function to call
+ * @param params The array of array of params to pass to the function
+ * @param value The final value to return
+ * @param async If the function should a promise-value
+ * @returns An async or sync version of value depending on the async param
+ */
+export function wrapForKnownAsyncCallArr<
+  func extends (...args: args) => unknown,
+  value extends unknown,
+  args extends unknown[],
+  IsAsync extends boolean,
+>(
+  func: func,
+  params: args[],
+  value: value,
+  async: IsAsync,
+): MaybePromise<value, IsAsync> {
+  // @ts-ignore
+  return wrapForPromiseKnown(
+    // @ts-ignore
+    knownAsyncCallArr(func, params, async),
+    value,
+    async,
+  );
 }
 /**
  * A function to help with processing values that may or may not be promises
@@ -128,8 +174,46 @@ export function maybePromiseThen<
   }
 }
 /**
- * Call a function that may or may not return a promise for each set of parameters, if any of the calls return a promise, it will return a promise that resolves to an array of the results.
- * If all calls return values directly, it will return an array of the results directly.
+ * A shortcut function to help with processing values that may or may not be promises but you know which
+ * @param maybePromise The value that may or may not be a promise
+ * @param callback The callback to call with the value returned when the promise is resolved or when the value is returned directly.
+ * @param async If the function is async
+ * @returns If async is true it will run maybePromise.then(callback), otherwise it will run callback(maybePromise). If your async param is wrong, the behavior is not guaranteed and may change inside major versions
+ */
+export function knownPromiseThen<
+  IsAsync extends boolean,
+  returnType,
+  cbReturnType,
+>(
+  maybePromise: MaybePromise<returnType, IsAsync>,
+  callback: (value: returnType) => cbReturnType,
+  async: IsAsync,
+): MaybePromise<cbReturnType, IsAsync> {
+  if (async) {
+    if (isThenable(maybePromise)) {
+      // @ts-ignore
+      return maybePromise.then(callback);
+    } else {
+      log(
+        "warning",
+        new ExpectedAsyncError("Expected an async value, but got a sync value"),
+      );
+      // @ts-ignore
+      return callback(maybePromise);
+    }
+  } else {
+    if (isThenable(maybePromise)) {
+      throw new ExpectedSyncError(
+        "Expected a sync value but got an async value",
+      );
+    } else {
+      // @ts-ignore
+      return callback(maybePromise);
+    }
+  }
+}
+/**
+ * Wrap a value for running a function multiple times with a different set of params each time. The function is ran with the params serially (one at a time, in order). If any of the values returned are async, this function will return a promise that resolves with all of the values returned after the promise-like values are resolved. Otherwise, it with synchronously return all of the values returned.
  * @param maybeAsyncFunc A function that may or may not return a promise
  * @param params The array of parameters to call the function with
  * @returns The results of the calls, either as an array of values or a promise that resolves to an array of values. See main description.
@@ -154,6 +238,55 @@ export function maybeAsyncCallArr<args extends unknown[], ret>(
   }
   // @ts-ignore
   return outputs;
+}
+/**
+ * Wrap a value for running a function multiple times with a different set of params each time. The function is ran with the params serially (one at a time, in order). If the async param is true, this function will return a promise that resolves with all of the values returned after the promise-like values are resolved. Otherwise, it with synchronously return all of the values returned.
+ * @param maybeAsyncFunc A function that may or may not return a promise
+ * @param params The array of parameters to call the function with
+ * @param async If the function should be async
+ * @returns The results of the calls, either as an array of values or a promise that resolves to an array of values. See main description.
+ */
+export function knownAsyncCallArr<
+  args extends unknown[],
+  ret,
+  IsAsync extends Boolean,
+>(
+  maybeAsyncFunc: (...args: args) => ret,
+  params: args[],
+  async: IsAsync,
+): IsAsync extends true ? Promise<AwaitedUnion<ret>[]> : ret[] {
+  const outputs = [];
+
+  if (async) {
+    // @ts-ignore
+    return (async () => {
+      for (const value of params) {
+        const output = maybeAsyncFunc(...value);
+        if (!isThenable(output)) {
+          log(
+            "warning",
+            new ExpectedAsyncError(
+              "Expected an async value, but got a sync value",
+            ),
+          );
+        }
+        outputs.push(await output);
+      }
+      return outputs;
+    })();
+  } else {
+    for (const value of params) {
+      const output = maybeAsyncFunc(...value);
+      if (isThenable(output)) {
+        throw new ExpectedSyncError(
+          "Expected a sync value but got an async value",
+        );
+      }
+      outputs.push(output);
+    }
+    // @ts-ignore
+    return outputs;
+  }
 }
 /**
  * Like a while loop, but calls a callback each repetition.
@@ -182,6 +315,49 @@ export function maybeAsyncWhileLoop<Returns extends Promise<void> | void>(
   }
   // @ts-ignore
   return;
+}
+/**
+ * Like a while loop, but calls a callback each repetition.
+ * Returns a promise that resolves when the loop finishes if the callback is async,
+ * and runs normally if it is not async.
+ * Avoids stack overflow by using a loop, not recursive callbacks
+ * @param callback The callback to call.
+ * @param condition A function that returns true to keep the loop going, and false to stop it.
+ * @returns A promise if the function is async, or void if not
+ */
+export function knownAsyncWhileLoop<IsAsync extends boolean>(
+  callback: () => MaybePromise<void, IsAsync>,
+  condition: () => boolean,
+  async: IsAsync,
+): MaybePromise<void, IsAsync> {
+  if (async) {
+    // @ts-ignore
+    return (async () => {
+      while (condition()) {
+        const output = callback();
+        if (!isThenable(output)) {
+          log(
+            "warning",
+            new ExpectedAsyncError(
+              "Expected an async value, but got a sync value",
+            ),
+          );
+        }
+        await output;
+      }
+    })();
+  } else {
+    while (condition()) {
+      const output = callback();
+      if (isThenable(output)) {
+        throw new ExpectedSyncError(
+          "Expected a sync value but got an async value",
+        );
+      }
+    }
+    // @ts-ignore
+    return;
+  }
 }
 // @TODO: move to @chickenjdk/common
 export type SimpleEventListener<T, N> = (arg: T, name: N) => void;
