@@ -1,9 +1,13 @@
 import { ChunkTransformerWithDataCallback } from "../chunkBuffer";
 import { addDefaultEndianness } from "../common";
 import { writableBufferBase } from "../writableBuffer";
-import { Writable } from "stream";
-export class writableStream extends writableBufferBase<true> {
-  #stream: Writable;
+import type { Writable } from "stream";
+import type { WritableStream } from "stream/web";
+export class writableStream<
+  T extends Writable | WritableStream,
+> extends writableBufferBase<true> {
+  #stream: T;
+  #writer: WritableStreamDefaultWriter<any> | undefined;
   /**
    * Write binary encoded data to a stream.
    * Writes each write to the stream immediately, no matter the size of the data.
@@ -11,23 +15,33 @@ export class writableStream extends writableBufferBase<true> {
    * This is accomplished by writing data with predictably sized chunks, regardless of how small or large the writes are.
    * @param stream The stream to write to.
    */
-  constructor(stream: Writable) {
+  constructor(stream: T) {
     super();
     this.#stream = stream;
   }
-  get stream(): Writable {
+  get stream(): T {
     return this.#stream;
   }
-  writeUint8Array(value: Uint8Array): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.#stream.write(value, (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
+  #write(data: Uint8Array) {
+    return new Promise<void>((resolve, reject) => {
+      if ("write" in this.#stream) {
+        this.#stream.write(data, (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+      } else {
+        if (this.#writer === undefined) {
+          this.#writer = this.#stream.getWriter();
         }
-      });
+        this.#writer!.write(data).then(resolve).catch(reject);
+      }
     });
+  }
+  writeUint8Array(value: Uint8Array): Promise<void> {
+    return this.#write(value);
   }
   writeUint8ArrayBackwards(value: Uint8Array): Promise<void> {
     return this.writeUint8Array(value.slice(0).reverse());
@@ -40,15 +54,7 @@ export class writableStream extends writableBufferBase<true> {
     return this.writeUint8Array(Uint8Array.from(value).reverse());
   }
   push(value: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.#stream.write(Uint8Array.of(value), (err) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve();
-        }
-      });
-    });
+    return this.writeUint8Array(Uint8Array.of(value));
   }
 }
 /**
@@ -57,15 +63,18 @@ export class writableStream extends writableBufferBase<true> {
  */
 export const writableStreamLE = addDefaultEndianness(writableStream, true);
 
-export class chunkingWritableStream extends writableBufferBase<true> {
+export class chunkingWritableStream<
+  T extends Writable | WritableStream,
+> extends writableBufferBase<true> {
+  #writer: WritableStreamDefaultWriter<any> | undefined;
   #chunkSplitter: ChunkTransformerWithDataCallback<true>;
-  #stream: Writable;
+  #stream: T;
   #used: number = 0;
   /**
    * The stream we are writing to.
    * @returns TThe stream we are writing to.
    */
-  get stream(): Writable {
+  get stream(): T {
     return this.#stream;
   }
   /**
@@ -85,6 +94,24 @@ export class chunkingWritableStream extends writableBufferBase<true> {
   async setChunkSize(value: number) {
     this.#chunkSplitter.resize(value);
   }
+  #write(data: Uint8Array) {
+    return new Promise<void>((resolve, reject) => {
+      if ("write" in this.#stream) {
+        this.#stream.write(data, (err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+      } else {
+        if (this.#writer === undefined) {
+          this.#writer = this.#stream.getWriter();
+        }
+        this.#writer!.write(data).then(resolve).catch(reject);
+      }
+    });
+  }
   /**
    * Write to the stream in predictable sized chunks.
    * This is useful for high speed/bandwidth writes to a stream, as it prevents memory issues with large writes and spamming the stream.
@@ -94,22 +121,12 @@ export class chunkingWritableStream extends writableBufferBase<true> {
    * @param stream The stream to write to.
    * @param chunkSize The size of the chunks to write to the stream.
    */
-  constructor(stream: Writable, chunkSize: number = 2000) {
+  constructor(stream: T, chunkSize: number = 2000) {
     super();
     this.#stream = stream;
     this.#chunkSplitter = new ChunkTransformerWithDataCallback<true>(
       chunkSize,
-      (chunk) => {
-        return new Promise<void>((resolve, reject) => {
-          this.#stream.write(chunk, (err) => {
-            if (err === null || err === undefined) {
-              resolve();
-            } else {
-              reject(err);
-            }
-          });
-        });
-      },
+      this.#write,
     );
   }
   /**

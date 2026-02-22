@@ -1,5 +1,6 @@
 import { readableBufferBaseAsync } from "../readableBuffer";
 import type { Readable } from "stream";
+import type { ReadableStream as WebReadableStream } from "stream/web";
 import {
   addDefaultEndianness,
   joinUint8Arrays,
@@ -13,14 +14,16 @@ type readableStreamEventMap = {
   drain: SimpleEventListener<undefined, "data">;
   close: SimpleEventListener<undefined, "close">;
 };
-export class readableStream extends readableBufferBaseAsync {
-  #stream: Readable;
+export class readableStream<
+  T extends Readable | WebReadableStream,
+> extends readableBufferBaseAsync {
+  #stream: T;
   #chunkQueue: Uint8Array[] = [];
   #chunkIdx: number = 0;
   #lock: LockQueue;
   drained: boolean = true;
   destroyed: boolean = false;
-  get stream(): Readable {
+  get stream(): T {
     return this.#stream;
   }
   get _chunks(): Uint8Array[] {
@@ -44,23 +47,42 @@ export class readableStream extends readableBufferBaseAsync {
   onceDrain(listener: () => void) {
     this.events.once("drain", () => listener());
   }
-  constructor(stream: Readable) {
+  constructor(stream: T) {
     super();
     this.events = new SimpleEventEmitter<readableStreamEventMap>();
     this.#lock = new LockQueue();
 
     this.#stream = stream;
-    // This listener has to go first by the way
-    this.#stream.on("data", (chunk: Uint8Array) => {
-      this.#chunkQueue.push(chunk);
-      this.drained = false;
-      this.events.emit("data", undefined);
-    });
-    this.#stream.on("close", () => {
-      this.destroyed = true;
-      // Abort all listeners because there is no more data
-      this.events.emit("close", undefined);
-    });
+    if ("on" in this.#stream) {
+      // This listener has to go first by the way
+      this.#stream.on("data", (chunk: Uint8Array) => {
+        this.#chunkQueue.push(chunk);
+        this.drained = false;
+        this.events.emit("data", undefined);
+      });
+      this.#stream.on("close", () => {
+        this.destroyed = true;
+        // Abort all listeners because there is no more data
+        this.events.emit("close", undefined);
+      });
+    } else {
+      const reader = this.#stream.getReader();
+      (async () => {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            reader.releaseLock();
+            // @ts-ignore
+            this.events.emit("close", undefined);
+            break;
+          }
+          this.#chunkQueue.push(value);
+          this.drained = false;
+          // @ts-ignore
+          this.events.emit("data", undefined);
+        }
+      })();
+    }
   }
   // Handle the hard parts of waiting for data
   async #waitChunk(): Promise<void> {
