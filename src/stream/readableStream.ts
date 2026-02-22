@@ -138,6 +138,7 @@ export class readableStream<
         bytesLeft -= chunk.length - this.#chunkIdx;
         // Consuming the whole chunk, so just delete it
         this.#chunkQueue.shift();
+        this.#chunkIdx = 0;
       }
     }
     this.#lock.release();
