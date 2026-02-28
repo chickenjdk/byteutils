@@ -26,11 +26,16 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
    * Set with .resize
    */
   get chunkSize() {
-    return this.#buffer.length
+    return this.#buffer.length;
   }
   abstract handleChunk(chunk: Uint8Array): MaybePromise<void, IsAsync>;
   /**
-   * Take a non-uniform-size stream of Uint8Arrays, and join them together into uniform size Uint8Arrays
+   * A listener for a change in the length of the transformer's internal buffer
+   */
+  lengthChange() {}
+  /**
+   * Take a non-uniform-size stream of Uint8Arrays, and join them together into uniform size Uint8Arrays.
+   * WARNING: Does not perform proper locking so expect issues with parallel async calls!
    * @param [chunkSize=2000] The size of a chunk. May be changed later.
    */
   constructor(chunkSize: number = 2000) {
@@ -49,6 +54,7 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
     const chunk = this.#buffer.subarray(0, this.#used);
     this.#buffer = new Uint8Array(this.chunkSize);
     this.#used = 0;
+    this.lengthChange();
     return wrapForPromise(
       this.handleChunk(chunk),
       undefined as void,
@@ -64,10 +70,7 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
     return maybeAsyncWhileLoop(
       () => {
         const handler = () => {
-          const bytesToWrite = Math.min(
-            bytesLeft,
-            this.chunkSize - this.#used,
-          );
+          const bytesToWrite = Math.min(bytesLeft, this.chunkSize - this.#used);
           this.#buffer.set(
             data instanceof Array
               ? data.slice(index, index + bytesToWrite)
@@ -77,6 +80,7 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
           this.#used += bytesToWrite;
           index += bytesToWrite;
           bytesLeft -= bytesToWrite;
+          this.lengthChange();
         };
         if (this.#used >= this.chunkSize) {
           return maybePromiseThen(this._flush(), handler);
@@ -94,9 +98,13 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
   push(byte: number): CouldBePossiblyPromise<void, IsAsync> {
     const handler = () => {
       this.#buffer[this.#used++] = byte;
+      this.lengthChange();
     };
     if (this.#used >= this.chunkSize) {
-      return maybePromiseThen(this._flush(), handler) as MaybePromise<void, IsAsync>;
+      return maybePromiseThen(this._flush(), handler) as MaybePromise<
+        void,
+        IsAsync
+      >;
     } else {
       handler();
     }
@@ -109,17 +117,36 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
     const oldData = this.#buffer.subarray(0, this.#used);
     this.#buffer = new Uint8Array(chunkSize);
     this.#used = 0;
-    return this.write(oldData);
+    // Could cause issues with async
+    const oldLengthChange = this.lengthChange;
+    this.lengthChange = () => {};
+    try {
+      return maybePromiseThen(this.write(oldData), (value) => {
+        this.lengthChange = oldLengthChange;
+      });
+    } catch (e) {
+      // Prevent corruption if this errors out
+      this.lengthChange = oldLengthChange;
+      throw e;
+    }
   }
 }
 
 export type ChunkTransformerEmitterEventMap = {
   chunk: SimpleEventListener<Uint8Array, "chunk">;
+  lengthChange: SimpleEventListener<number, "lengthChange">;
+  dataAvailable: SimpleEventListener<number, "dataAvailable">;
 };
 export class ChunkTransformerEmitter extends ChunkTransformer<false> {
   emitter: SimpleEventEmitter<ChunkTransformerEmitterEventMap>;
   handleChunk(chunk: Uint8Array): void {
     this.emitter.emit("chunk", chunk);
+  }
+  lengthChange(): void {
+    this.emitter.emit("lengthChange", this.length);
+    if (this.length > 0) {
+      this.emitter.emit("dataAvailable", this.length);
+    }
   }
   /**
    * Take a non-uniform-size stream of Uint8Arrays, and join them together into uniform size Uint8Arrays.
