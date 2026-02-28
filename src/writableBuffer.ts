@@ -497,6 +497,7 @@ export class writableBuffer
           this.writeUint8Array(buffer);
           return;
         }
+        // WriteUint8Array will have issues if buffer is not a Uint8Array. Throw error here!
       }
       this.writeUint8Array(
         value instanceof Uint8Array
