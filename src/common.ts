@@ -359,6 +359,35 @@ export function knownAsyncWhileLoop<IsAsync extends boolean>(
     return;
   }
 }
+export function maybePromiseResolve<IsAsync extends boolean, V>(
+  value: V,
+  async: IsAsync,
+): MaybePromise<V, IsAsync> {
+  if (async) {
+    // @ts-ignore
+    return Promise.resolve(value);
+  } else {
+    // @ts-ignore
+    return value;
+  }
+}
+export function wrapForLockIfNeeded(
+  isAsync: boolean,
+  lock: LockQueue | undefined,
+  cb: () => any,
+) {
+  if (isAsync) {
+    return (async () => {
+      // @ts-ignore
+      await lock.acquire();
+      const result = await cb();
+      lock?.release();
+      return result;
+    })();
+  } else {
+    return cb();
+  }
+}
 // @TODO: move to @chickenjdk/common
 export type SimpleEventListener<T, N> = (arg: T, name: N) => void;
 export type EventMap = { [name: string]: SimpleEventListener<any, any> };
@@ -458,6 +487,7 @@ export class LockQueue {
     if (this.#closed) {
       return Promise.reject(this.#acquireError);
     } else if (!this.#locked) {
+      this.#locked = true;
       // Return, as the queue is already empty
       return Promise.resolve();
     } else {
@@ -466,6 +496,7 @@ export class LockQueue {
           if (aborted) {
             reject(abortedError);
           } else {
+            this.#locked = true;
             resolve();
           }
         });
