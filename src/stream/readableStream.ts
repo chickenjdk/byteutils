@@ -1,4 +1,4 @@
-import { readableBufferBaseAsync } from "../readableBuffer";
+import { readableBufferBaseAsync } from "../readableBuffer.js";
 import type { Readable } from "stream";
 import type { ReadableStream as WebReadableStream } from "stream/web";
 import {
@@ -7,8 +7,8 @@ import {
   LockQueue,
   SimpleEventEmitter,
   SimpleEventListener,
-} from "../common";
-import { StreamEndedError } from "./errors";
+} from "../common.js";
+import { StreamEndedError } from "./errors.js";
 type readableStreamEventMap = {
   data: SimpleEventListener<undefined, "data">;
   drain: SimpleEventListener<undefined, "data">;

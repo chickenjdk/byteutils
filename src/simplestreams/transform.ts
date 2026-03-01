@@ -1,5 +1,5 @@
-import { BaseStream } from "./base";
-import { StreamHandle } from "./handles";
+import { BaseStream } from "./base.js";
+import { StreamHandle } from "./handles.js";
 
 export abstract class Transform<IsAsync extends boolean> extends BaseStream<IsAsync> {
   source: StreamHandle<IsAsync>;

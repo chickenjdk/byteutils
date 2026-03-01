@@ -1,6 +1,6 @@
-import { ChunkTransformerWithDataCallback } from "../chunkBuffer";
-import { addDefaultEndianness } from "../common";
-import { writableBufferBase } from "../writableBuffer";
+import { ChunkTransformerWithDataCallback } from "../chunkBuffer.js";
+import { addDefaultEndianness } from "../common.js";
+import { writableBufferBase } from "../writableBuffer.js";
 import type { Writable } from "stream";
 import type { WritableStream } from "stream/web";
 export class writableStream<

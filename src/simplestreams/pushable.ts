@@ -1,8 +1,12 @@
-import { ChunkTransformerEmitter } from "../chunkBuffer";
-import { LockQueue, maybePromiseResolve, wrapForLockIfNeeded } from "../common";
-import { MaybePromise } from "../types";
-import { writableBuffer, writableBufferBase } from "../writableBuffer";
-import { BaseStream } from "./base";
+import { ChunkTransformerEmitter } from "../chunkBuffer.js";
+import {
+  joinUint8Arrays,
+  LockQueue,
+  maybePromiseResolve,
+  wrapForLockIfNeeded,
+} from "../common.js";
+import { writableBuffer, writableBufferBase } from "../writableBuffer.js";
+import { BaseStream } from "./base.js";
 
 export class PushableStreamSource<
   IsAsync extends boolean,
@@ -41,6 +45,9 @@ export class PushableStream<
     this.#buffers.push(data);
   }
   #buffers: Uint8Array[];
+  get bufferedLen() {
+    return this.#buffers.reduce((adding, { length }) => adding + length, 0);
+  }
   _push(data: number) {
     this.#chunkSplitter.push(data);
   }
@@ -59,7 +66,10 @@ export class PushableStream<
     this.#chunkSplitter = new ChunkTransformerEmitter(chunkSize);
     this.#buffers = [];
     this.isAsync = isAsync;
-    this.#chunkSplitter.emitter.on("chunk", this.#chunkSplitterCallback.bind(this));
+    this.#chunkSplitter.emitter.on(
+      "chunk",
+      this.#chunkSplitterCallback.bind(this),
+    );
     if (isAsync) {
       // @ts-ignore
       this.#lock = new LockQueue();
@@ -67,22 +77,44 @@ export class PushableStream<
     this.source = new PushableStreamSource(this, isAsync);
   }
   isAsync: IsAsync;
-  pull() {
+  pull(ideal: number) {
+    // If we have a full chunk, output it right node
     return wrapForLockIfNeeded(this.isAsync, this.#lock, () => {
       if (this.#buffers.length > 0) {
         return maybePromiseResolve(this.#buffers.shift(), this.isAsync);
-      } else if (this.#chunkSplitter.length > 0) {
+      } else if (this.#chunkSplitter.length > ideal) {
+        // If we have enough to satisfy ideal, just flush and output that
         this.#chunkSplitter.flush();
         return maybePromiseResolve(this.#buffers.shift(), this.isAsync);
       } else {
+        // Not enough for ideal
         // Needs more data
         if (this.isAsync) {
           return (async () => {
             await new Promise<void>((resolve) => {
-              this.#chunkSplitter.emitter.once("dataAvailable", () => {resolve()});
+              this.#chunkSplitter.emitter.once("lengthChange", (amount) => {
+                if (amount + this.bufferedLen > ideal) {
+                  resolve();
+                }
+              });
             });
-            this.#chunkSplitter.flush();
-            return this.#buffers.shift();
+            if (this.bufferedLen > ideal) {
+              // If the currently buffered data is enough, do nothing. Otherwise, flush so we have enough.
+            } else {
+              this.#chunkSplitter.flush();
+            }
+            const buffers = [];
+            let length = 0;
+            while (ideal > length) {
+              const item = this.#buffers.shift();
+              if (!item) {
+                throw new Error("WTF");
+              }
+              buffers.push(item);
+              length += item.length;
+            }
+            buffers.reverse();
+            return joinUint8Arrays(buffers, length);
           })();
         } else {
           return new Uint8Array([]);

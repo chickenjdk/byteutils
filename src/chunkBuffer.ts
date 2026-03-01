@@ -4,8 +4,8 @@ import {
   SimpleEventEmitter,
   SimpleEventListener,
   wrapForPromise,
-} from "./common";
-import { CouldBePossiblyPromise, MaybePromise } from "./types";
+} from "./common.js";
+import { CouldBePossiblyPromise, MaybePromise } from "./types.js";
 
 export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
   #buffer: Uint8Array;

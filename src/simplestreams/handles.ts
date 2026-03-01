@@ -5,10 +5,10 @@ import {
   LockQueue,
   maybePromiseResolve,
   wrapForLockIfNeeded,
-} from "../common";
-import { readableBufferBase } from "../readableBuffer";
-import { MaybePromise } from "../types";
-import { BaseStream } from "./base";
+} from "../common.js";
+import { readableBufferBase } from "../readableBuffer.js";
+import { MaybePromise } from "../types.js";
+import { BaseStream } from "./base.js";
 
 export class StreamHandle<
   IsAsync extends boolean,

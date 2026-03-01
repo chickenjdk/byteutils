@@ -1,7 +1,6 @@
-import { EventEmitter } from "stream";
-import { AwaitedUnion, MaybePromise } from "./types";
+import { AwaitedUnion, MaybePromise } from "./types.js";
 import { log } from "@chickenjdk/common";
-import { ExpectedAsyncError, ExpectedSyncError } from "./errors";
+import { ExpectedAsyncError, ExpectedSyncError } from "./errors.js";
 // Buffers for converting numbers!
 export const float32Array = new Float32Array(1);
 export const uint8Float32ArrayView = new Uint8Array(float32Array.buffer);

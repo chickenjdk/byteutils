@@ -1,4 +1,4 @@
-import { decodeMutf8, decodeUtf8 } from "./utf8tools";
+import { decodeMutf8, decodeUtf8 } from "./utf8tools.js";
 import {
   float32Array,
   uint8Float32ArrayView,
@@ -8,8 +8,8 @@ import {
   addDefaultEndianness,
   maybePromiseThen,
   maybeAsyncCallArr,
-} from "./common";
-import type { cloneFunc, MaybePromise } from "./types";
+} from "./common.js";
+import type { cloneFunc, MaybePromise } from "./types.js";
 const constants = {
   // 11111111111111111111111111111111
   allOnes: 0xffffffff,

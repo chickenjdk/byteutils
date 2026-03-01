@@ -1,4 +1,4 @@
-import { encodeMutf8, encodeUtf8 } from "./utf8tools";
+import { encodeMutf8, encodeUtf8 } from "./utf8tools.js";
 import {
   joinUint8Arrays,
   addDefaultEndianness,
@@ -9,9 +9,9 @@ import {
   uint8Float64ArrayView,
   wrapForPromise,
   wrapForAsyncCallArr,
-} from "./common";
-import { uint8ArrayLike, cloneFunc, MaybePromise, mergeValues } from "./types";
-import { ChunkTransformerWithDataCallback } from "./chunkBuffer";
+} from "./common.js";
+import { uint8ArrayLike, cloneFunc, MaybePromise } from "./types.js";
+import { ChunkTransformerWithDataCallback } from "./chunkBuffer.js";
 const constants = {
   // 11111111111111111111111111111111
   allOnes: 0xffffffff,

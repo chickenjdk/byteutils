@@ -1,2 +1,2 @@
-export * from "./readableStream";
-export * from "./writableStream";
+export * from "./readableStream.js";
+export * from "./writableStream.js";

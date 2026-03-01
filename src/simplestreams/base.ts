@@ -1,4 +1,4 @@
-import { MaybePromise } from "../types";
+import { MaybePromise } from "../types.js";
 
 export abstract class BaseStream<IsAsync extends boolean> {
   abstract isAsync: IsAsync;
