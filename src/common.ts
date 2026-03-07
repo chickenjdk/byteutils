@@ -388,7 +388,7 @@ export function wrapForLockIfNeeded(
   }
 }
 // @TODO: move to @chickenjdk/common
-export type SimpleEventListener<T, N> = (arg: T, name: N) => void;
+export type SimpleEventListener<T, N extends string> = (arg: T, name: N) => void;
 export type EventMap = { [name: string]: SimpleEventListener<any, any> };
 export type EventsStorage<M extends EventMap> = {
   [T in keyof M]:
