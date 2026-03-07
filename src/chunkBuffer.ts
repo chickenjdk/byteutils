@@ -16,7 +16,6 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
   /**
    * Get the currently buffered data.
    * Useful for custom logic
-   * @private
    */
   get _buffered() {
     return this.#buffer.subarray(0, this.#used);
@@ -57,6 +56,25 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
     this.lengthChange();
     return wrapForPromise(
       this.handleChunk(chunk),
+      undefined as void,
+    ) as MaybePromise<void, IsAsync>;
+  }
+  /**
+   * Flush the used section of the chunk to the handler.
+   * @returns
+   */
+  flushUsed() {
+    // If there are less than 20 bytes left, it does not really make sense to keep using the same chunk
+    if (this.#buffer.length - this.#used < 20) {
+      return this._flush();
+    }
+    const usedChunk = this.#buffer.subarray(0, this.#used);
+    const restChunk = this.#buffer.subarray(this.#used);
+    this.#used = 0;
+    this.#buffer = restChunk;
+    this.lengthChange();
+    return wrapForPromise(
+      this.handleChunk(usedChunk),
       undefined as void,
     ) as MaybePromise<void, IsAsync>;
   }
@@ -158,10 +176,12 @@ export class ChunkTransformerEmitter extends ChunkTransformer<false> {
     this.emitter = new SimpleEventEmitter();
   }
   /**
-   * Flush the currently buffered data to
+   * Flush the currently buffered data to the output.
+   * Replaced by .flushUsed
+   * @deprecated
    */
   flush() {
-    return this._flush();
+    return this.flushUsed();
   }
 }
 
@@ -184,7 +204,12 @@ export class ChunkTransformerWithDataCallback<
   handleChunk(chunk: Uint8Array) {
     return this.#callback(chunk);
   }
+  /**
+   * Flush the currently buffered data to the output.
+   * Replaced by .flushUsed
+   * @deprecated
+   */
   flush() {
-    return this._flush();
+    return this.flushUsed();
   }
 }
