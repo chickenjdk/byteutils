@@ -12,3 +12,9 @@ export const ExpectedSyncError = createClassifiedError(
   ByteutilsError,
   true,
 );
+
+export const StreamClosedError = createClassifiedError(
+  "Stream is closed!",
+  ByteutilsError,
+  true,
+);

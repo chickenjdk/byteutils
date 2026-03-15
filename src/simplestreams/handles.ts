@@ -8,12 +8,13 @@ import {
 } from "../common.js";
 import { readableBufferBase } from "../readableBuffer.js";
 import { MaybePromise } from "../types.js";
-import { BaseStream } from "./base.js";
+import { BaseStream, Sourced } from "./base.js";
 
-export class StreamHandle<
-  IsAsync extends boolean,
-> extends readableBufferBase<IsAsync> {
-  #source: BaseStream<IsAsync>;
+export class StreamHandle<IsAsync extends boolean>
+  extends readableBufferBase<IsAsync>
+  implements Sourced<BaseStream<IsAsync>>
+{
+  readonly source: BaseStream<IsAsync>;
 
   #chunk: Uint8Array = new Uint8Array([]);
   #chunkIdx: number = 0;
@@ -27,7 +28,7 @@ export class StreamHandle<
   }
   constructor(source: BaseStream<IsAsync>, isAsync: IsAsync) {
     super();
-    this.#source = source;
+    this.source = source;
     if (isAsync) {
       //@ts-ignore
       this.#lock = new LockQueue();
@@ -39,9 +40,9 @@ export class StreamHandle<
     if (!(this.#chunkIdx in this.#chunk)) {
       // @ts-ignore
       return knownPromiseThen(
-        this.#source.pull(ideal),
+        this.source.pull(ideal),
         (value) => {
-          if (value.length > 0) {
+          if (value !== undefined) {
             this.#chunk = value;
             this.#chunkIdx = 0;
           } else {

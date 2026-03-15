@@ -9,6 +9,9 @@ export class writableStream<
   #stream: T;
   #writer: WritableStreamDefaultWriter<any> | undefined;
   /**
+   * @deprecated
+   * Use simplestreams adapters instead
+   *
    * Write binary encoded data to a stream.
    * Writes each write to the stream immediately, no matter the size of the data.
    * For this reason, for high speed/bandwidth, it is recommended to use `chunkingWritableStream` to prevent memory issues with large writes and spamming the stream.
@@ -113,6 +116,9 @@ export class chunkingWritableStream<
     });
   }
   /**
+   * @deprecated
+   * Use simplestreams adapters instead
+   *
    * Write to the stream in predictable sized chunks.
    * This is useful for high speed/bandwidth writes to a stream, as it prevents memory issues with large writes and spamming the stream.
    * It accomplishes this by writing data with predictably sized chunks, regardless of how small or large the writes are.

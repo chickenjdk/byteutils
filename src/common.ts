@@ -1,4 +1,4 @@
-import { AwaitedUnion, MaybePromise } from "./types.js";
+import type { AwaitedUnion, MaybePromise } from "./types.js";
 import { log } from "@chickenjdk/common";
 import { ExpectedAsyncError, ExpectedSyncError } from "./errors.js";
 // Buffers for converting numbers!
@@ -8,6 +8,8 @@ export const float64Array = new Float64Array(1);
 export const uint8Float64ArrayView = new Uint8Array(float64Array.buffer);
 float32Array[0] = 2;
 export const isBigEndian = uint8Float32ArrayView[0] === 64;
+// A empty Uint8Array
+export const noDataUint8Array = new Uint8Array(0);
 // Common helpers
 // Binary helpers
 /**
@@ -370,12 +372,21 @@ export function maybePromiseResolve<IsAsync extends boolean, V>(
     return value;
   }
 }
-export function wrapForLockIfNeeded(
+/**
+ * Wrap a callback for waiting for the lock, if isAsync is true. Otherwise this is a pass-though.
+ * Only wrap the code that needs the lock in this, to allow others to use the lock.
+ * @param isAsync If the lock should be enabled.
+ * @param lock The lock. Only should be provided if isAsync is true
+ * @param cb The callback to call once the lock is acquired, or immediately if isAsync is false.
+ * @returns The result of the callback.
+ */
+export function wrapForLockIfNeeded<T>(
   isAsync: boolean,
   lock: LockQueue | undefined,
-  cb: () => any,
-) {
+  cb: () => T,
+): T {
   if (isAsync) {
+    // @ts-ignore
     return (async () => {
       // @ts-ignore
       await lock.acquire();
@@ -388,7 +399,10 @@ export function wrapForLockIfNeeded(
   }
 }
 // @TODO: move to @chickenjdk/common
-export type SimpleEventListener<T, N extends string> = (arg: T, name: N) => void;
+export type SimpleEventListener<T, N extends string> = (
+  arg: T,
+  name: N,
+) => void;
 export type EventMap = { [name: string]: SimpleEventListener<any, any> };
 export type EventsStorage<M extends EventMap> = {
   [T in keyof M]:

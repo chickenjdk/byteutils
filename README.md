@@ -26,7 +26,7 @@ and mutch more.
 ### Varint
 
 First, find the class you want to extend. For this example, we will be extending readableStream to add minecraft's varint [From here](https://codegolf.stackexchange.com/questions/275210/parse-minecrafts-varint).
-This was mainly to show how to add a variable-length encoding. We also have a delay between writes to show how this library can handle waiting for data from streams
+This was mainly to show how to add a variable-length encoding.
 
 ```javascript
 import { readableStream, common } from "@chickenjdk/byteutils";
@@ -78,97 +78,62 @@ for (const [, bytes] of readPairs) {
 
 ```
 
-### Make a Tranform stream to convert varints to 32 bit two's complements (That is what most programs convert them to internaly)
+### Make a Transform stream to convert varints to 32 bit two's complements and re-parse them
 
 ```javascript
 import {
-  readableStream,
-  writableStream,
-  common,
+  simplestreams,
   writableBufferFixedSize,
 } from "@chickenjdk/byteutils";
-import { Transform, PassThrough, Readable, Duplex } from "stream";
-import { pipeline } from "stream/promises";
-export class readableStreamWithVarint extends readableStream {
-  /**
-   * Parse a minecraft varint
-   * @returns The varint
-   */
-  readVarint() {
+
+// Copy + pasted from a random code golf
+const encode = (n) => (n >> 7 ? [(n & 127) | 128, ...encode(n >>> 7)] : [n]);
+
+const writableTranslationInst = new writableBufferFixedSize(4);
+
+class ReadableStreamWithVarint extends simplestreams.transform.Transform {
+  async pull() {
     let result = 0;
     let shift = 0;
-    const handleByte = (byte) => {
-      // loop over every byte
-      result |= (byte & 0x7f) << shift; // add the current 7 bits onto the pre-existing result
+    let done = false;
+
+    while (!done) {
+      const byte = await this.source.shift();
+      result |= (byte & 0x7f) << shift;
       shift += 7;
-      if (!(byte & 0x80)) {
-        // if the continue bit isn't enabled, break.
-        return result;
-      } else {
-        return common.maybePromiseThen(this.shift(), handleByte);
-      }
-    };
-    return common.maybePromiseThen(this.shift(), handleByte);
-  }
-}
-function buildTransform() {
-  const PassThroughInst = new PassThrough();
-  const readableInst = new readableStreamWithVarint(PassThroughInst);
-  const writableTranslationInst = new writableBufferFixedSize(4);
-  let waitingChunks = [];
-  let handler = handleVarint();
-  const TransformStream = new Transform({
-    async transform(chunk, encoding, callback) {
-      PassThroughInst.write(chunk);
-      await new Promise((resolve) => readableInst.onceDrain(resolve));
-      // This is safe because flush->all data read but not returned yet->handler done (we are awaiting the current value, which has not gotten to the data yet, so we won't be stuck waiting forever because it restarted itself)
-      await handler;
-      const data = common.joinUint8Arrays(waitingChunks);
-      waitingChunks = [];
-      callback(null, data);
-    },
-  });
-  async function handleVarint() {
-    writableTranslationInst.reset();
-    const int = await readableInst.readVarint();
-    writableTranslationInst.writeTwosComplement(int, 4);
-    // Copying the buffer is important, not doing so will result in the last number over and over because it is later overwritten
-    waitingChunks.push(writableTranslationInst.buffer.slice(0));
-    if (!TransformStream.closed) {
-      handler = handleVarint();
+      if (!(byte & 0x80)) done = true;
     }
-  }
 
-  return TransformStream;
+    writableTranslationInst.writeTwosComplement(result, 4);
+    const data = writableTranslationInst.buffer;
+    writableTranslationInst.reset();
+    return data;
+  }
 }
-const readPairs = [
-  [1, [0x1]],
-  [25565, [0xdd, 0xc7, 0x01]],
-  [1113983, [0xff, 0xfe, 0x43]],
-  [-1113983, [0x81,0x81,0xbc,0xff,0xf]],
-  [-25565, [0xa3,0xb8,0xfe,0xff,0xf]],
-  [-1, [0xff, 0xff, 0xff, 0xff, 0x0f]],
-];
-const loggerStream = new PassThrough();
-const loggerReadableStreamInst = new readableStream(loggerStream);
-(async () => {
-  let i = 0;
-  while (!loggerStream.closed) {
-    // Don't worry about Stream ended before listener could be satisfied errors in this configuration
-    // You could check if the error is that, but this is just an example
-    try {
-      console.log(
-        `Read ${await loggerReadableStreamInst.readTwosComplement(
-          4
-        )} Expected ${readPairs[i++][0]}`
-      );
-    } catch (e) {}
-  }
-})();
-await pipeline(
-  Readable.from(readPairs.map(([, data]) => new Uint8Array(data))),
-  buildTransform(),
-  loggerStream
-);
 
+// Generate data
+const numberOfVarints = 500000;
+
+// Generate varints, both positive and negative
+const readPairs = Array.from({ length: numberOfVarints }, (_, i) => {
+  const value = i % 2 === 0 ? i : -i;
+  return [value, encode(value)];
+});
+
+console.log(readPairs);
+// Actually do it
+const source = new simplestreams.pushable.PushableStream(true);
+const transform = new ReadableStreamWithVarint(source, true);
+const handle = new simplestreams.handles.StreamHandle(transform, true);
+
+for (const [, bytes] of readPairs) {
+  await source.source.writeArray(bytes);
+}
+
+for (const [expected] of readPairs) {
+  const got = await handle.readTwosComplement(4);
+  if (got !== expected) {
+    throw new Error(`Value mismatch, expected ${expected} but got ${got}`)
+  }
+}
 ```
