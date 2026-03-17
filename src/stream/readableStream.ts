@@ -11,7 +11,7 @@ import {
 import { StreamEndedError } from "./errors.js";
 type readableStreamEventMap = {
   data: SimpleEventListener<undefined, "data">;
-  drain: SimpleEventListener<undefined, "data">;
+  drain: SimpleEventListener<undefined, "drain">;
   close: SimpleEventListener<undefined, "close">;
 };
 export class readableStream<
