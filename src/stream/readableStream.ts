@@ -76,6 +76,7 @@ export class readableStream<
           const { value, done } = await reader.read();
           if (done) {
             reader.releaseLock();
+            this.destroyed = true;
             // @ts-ignore
             this.events.emit("close", undefined);
             break;
