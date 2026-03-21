@@ -2,14 +2,17 @@ import {
   maybeAsyncWhileLoop,
   maybePromiseThen,
   SimpleEventEmitter,
-  SimpleEventListener,
   wrapForPromise,
+  type SimpleEventListener,
 } from "./common.js";
-import { CouldBePossiblyPromise, MaybePromise } from "./types.js";
+import type { CouldBePossiblyPromise, MaybePromise } from "./types.js";
 
 export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
   #buffer: Uint8Array;
   #used: number = 0;
+  #chunkSize: number;
+  // TODO: next major version, change this to false
+  resizingIsImmediate: boolean = true;
   get length() {
     return this.#used;
   }
@@ -21,11 +24,17 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
     return this.#buffer.subarray(0, this.#used);
   }
   /**
-   * The chunk size.
-   * Set with .resize
+   * The size of the buffer. NOT the size that we are allocating for new chunks.
    */
   get chunkSize() {
     return this.#buffer.length;
+  }
+  /**
+   * The size that the newly allocated buffers should be.
+   * Set with .resize
+   */
+  get newChunkSize() {
+    return this.#chunkSize;
   }
   abstract handleChunk(chunk: Uint8Array): MaybePromise<void, IsAsync>;
   /**
@@ -38,7 +47,17 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
    * @param [chunkSize=2000] The size of a chunk. May be changed later.
    */
   constructor(chunkSize: number = 2000) {
-    this.#buffer = new Uint8Array(chunkSize);
+    this.#chunkSize = chunkSize;
+    this.#buffer = this._allocate();
+  }
+
+  /**
+   * Allocate a buffer (it does not have to be the correct chunk size)
+   * @private
+   * @returns The allocated buffer
+   */
+  _allocate(): Uint8Array {
+    return new Uint8Array(this.#chunkSize);
   }
 
   /**
@@ -51,7 +70,7 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
   _flush() {
     // May flush even if there is no data, but that is the caller's fault
     const chunk = this.#buffer.subarray(0, this.#used);
-    this.#buffer = new Uint8Array(this.chunkSize);
+    this.#buffer = this._allocate();
     this.#used = 0;
     this.lengthChange();
     return wrapForPromise(
@@ -59,13 +78,14 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
       undefined as void,
     ) as MaybePromise<void, IsAsync>;
   }
+
   /**
    * Flush the used section of the chunk to the handler.
    * @returns
    */
   flushUsed() {
     // If there are less than 20 bytes left, it does not really make sense to keep using the same chunk
-    if (this.#buffer.length - this.#used < 20) {
+    if (this.chunkSize - this.#used < 20) {
       return this._flush();
     }
     const usedChunk = this.#buffer.subarray(0, this.#used);
@@ -132,20 +152,23 @@ export abstract class ChunkTransformer<IsAsync extends boolean = true | false> {
    * @param chunkSize The chunk size
    */
   resize(chunkSize: number) {
-    const oldData = this.#buffer.subarray(0, this.#used);
-    this.#buffer = new Uint8Array(chunkSize);
-    this.#used = 0;
-    // Could cause issues with async
-    const oldLengthChange = this.lengthChange;
-    this.lengthChange = () => {};
-    try {
-      return maybePromiseThen(this.write(oldData), (value) => {
+    this.#chunkSize = chunkSize;
+    if (this.resizingIsImmediate) {
+      const oldData = this.#buffer.subarray(0, this.#used);
+      this.#buffer = this._allocate();
+      this.#used = 0;
+      // Could cause issues with async
+      const oldLengthChange = this.lengthChange;
+      this.lengthChange = () => {};
+      try {
+        return maybePromiseThen(this.write(oldData), (value) => {
+          this.lengthChange = oldLengthChange;
+        });
+      } catch (e) {
+        // Prevent corruption if this errors out
         this.lengthChange = oldLengthChange;
-      });
-    } catch (e) {
-      // Prevent corruption if this errors out
-      this.lengthChange = oldLengthChange;
-      throw e;
+        throw e;
+      }
     }
   }
 }

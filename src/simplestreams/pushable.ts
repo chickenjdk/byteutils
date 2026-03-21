@@ -3,11 +3,15 @@ import {
   joinUint8Arrays,
   LockQueue,
   maybePromiseResolve,
+  noDataUint8Array,
+  SimpleEventEmitter,
   wrapForLockIfNeeded,
 } from "../common.js";
 import { StreamClosedError } from "../errors.js";
+import { MaybePromise } from "../types.js";
 import { writableBufferBase } from "../writableBuffer.js";
-import { BaseStream, Sourced } from "./base.js";
+import { BaseStream, baseStreamEvents, Sourced } from "./base.js";
+import FIFO from "fast-fifo";
 
 export abstract class PushableStreamBase<IsAsync extends boolean, Source>
   extends BaseStream<IsAsync>
@@ -15,11 +19,13 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
 {
   #chunkSplitter: ChunkTransformerEmitter;
   #chunkSplitterCallback(data: Uint8Array) {
+    this.#bufferedLen += data.length;
     this.#buffers.push(data);
   }
-  #buffers: Uint8Array[];
+  #buffers: FIFO<Uint8Array>;
+  #bufferedLen: number = 0;
   get bufferedLen() {
-    return this.#buffers.reduce((adding, { length }) => adding + length, 0);
+    return this.#bufferedLen;
   }
   #closedWriteCheck() {
     if (this.closed) {
@@ -31,14 +37,17 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
   _push(data: number) {
     this.#closedWriteCheck();
     this.#chunkSplitter.push(data);
+    this._setPullableState(true);
   }
   _writeArray(data: number[]) {
     this.#closedWriteCheck();
     this.#chunkSplitter.write(data);
+    this._setPullableState(true);
   }
   _writeUint8Array(data: Uint8Array) {
     this.#closedWriteCheck();
     this.#chunkSplitter.write(data);
+    this._setPullableState(true);
   }
   // @ts-ignore
   #lock: IsAsync extends true ? LockQueue : undefined;
@@ -55,7 +64,7 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
   constructor(isAsync: IsAsync, chunkSize: number = 2000) {
     super();
     this.#chunkSplitter = new ChunkTransformerEmitter(chunkSize);
-    this.#buffers = [];
+    this.#buffers = new FIFO();
     this.isAsync = isAsync;
     this.#chunkSplitter.emitter.on(
       "chunk",
@@ -74,6 +83,7 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
    * @private
    */
   _handleDataStarvation(): void {
+    this._setPullableState(false);
     if (this.closed) {
       this._doPullCheck = true;
       throw new StreamClosedError(
@@ -81,20 +91,20 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
       );
     }
   }
+  #buffersShift() {
+    const data = this.#buffers.shift()!;
+    this.#bufferedLen -= data.length;
+    return data;
+  }
   _pull(ideal: number) {
-    // If we have a full chunk, output it right node
     return wrapForLockIfNeeded(this.isAsync, this.#lock, () => {
+      // If we have a full chunk, output it right now
       if (this.#buffers.length > 0) {
-        return maybePromiseResolve(this.#buffers.shift(), this.isAsync);
-      } else if (this.#chunkSplitter.length >= ideal) {
+        return maybePromiseResolve(this.#buffersShift(), this.isAsync);
+      } else if (this.#chunkSplitter.length > 0) {
         // If we have enough to satisfy ideal, just flush and output that
         this.#chunkSplitter.flushUsed();
-        return maybePromiseResolve(this.#buffers.shift(), this.isAsync);
-      } else if (this.closed && this.#chunkSplitter.length > 0) {
-        // If we are closed and there is ANY data, give it all and fully close
-        this._doPullCheck = true;
-        this.#chunkSplitter.flushUsed();
-        return maybePromiseResolve(this.#buffers.shift(), this.isAsync);
+        return maybePromiseResolve(this.#buffersShift(), this.isAsync);
       } else {
         // Not enough for ideal
         // Needs more data
@@ -103,34 +113,23 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
           return (async () => {
             await new Promise<void>((resolve) => {
               this.#chunkSplitter.emitter.once("lengthChange", (amount) => {
-                if (amount + this.bufferedLen > ideal) {
+                if (this.#buffers.length > 0 || amount > 0) {
                   resolve();
                 }
               });
             });
-            if (this.bufferedLen > ideal) {
-              // If the currently buffered data is enough, do nothing. Otherwise, flush so we have enough.
+            if (this.#buffers.length > 0) {
+              return this.#buffersShift();
             } else {
               this.#chunkSplitter.flushUsed();
+              return this.#buffersShift();
             }
-            const buffers = [];
-            let length = 0;
-            while (ideal > length) {
-              const item = this.#buffers.shift();
-              if (!item) {
-                throw new Error("Huh?");
-              }
-              buffers.push(item);
-              length += item.length;
-            }
-            buffers.reverse();
-            return joinUint8Arrays(buffers, length);
           })();
         } else {
-          return undefined;
+          return noDataUint8Array;
         }
       }
-    });
+    }) as MaybePromise<Uint8Array, IsAsync>;
   }
 }
 
@@ -169,9 +168,11 @@ export class PushableStream<IsAsync extends boolean> extends PushableStreamBase<
   PushableStreamSource<IsAsync>
 > {
   readonly source: PushableStreamSource<IsAsync>;
+  readonly events: SimpleEventEmitter<baseStreamEvents>;
 
   constructor(isAsync: IsAsync, chunkSize: number = 2000) {
     super(isAsync, chunkSize);
     this.source = new PushableStreamSource(this, isAsync);
+    this.events = new SimpleEventEmitter();
   }
 }

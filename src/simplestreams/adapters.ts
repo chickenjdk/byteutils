@@ -1,10 +1,12 @@
 import { Readable } from "stream";
 import { PushableStreamBase } from "./pushable.js";
-import { BaseStream } from "./base.js";
+import { BaseStream, baseStreamEvents } from "./base.js";
+import { SimpleEventEmitter } from "../common.js";
 
 export class NodejsStreamIAdapter extends PushableStreamBase<true, Readable> {
-  isAsync: true = true;
+  readonly isAsync: true = true;
   readonly source: Readable;
+  readonly events: SimpleEventEmitter<baseStreamEvents>;
   highWaterMark: number;
   lowWaterMark: number;
 
@@ -20,6 +22,7 @@ export class NodejsStreamIAdapter extends PushableStreamBase<true, Readable> {
     this.highWaterMark = highWaterMark;
     this.lowWaterMark = lowWaterMark;
     this.source = source;
+    this.events = new SimpleEventEmitter();
     this.source.on("data", (data) => {
       this._writeUint8Array(data);
       if (this.bufferedLen > highWaterMark) {
@@ -47,14 +50,16 @@ export class NodejsStreamOAdapter extends Readable {
 }
 
 export class WhatwgStreamIAdapter extends BaseStream<true> {
-  isAsync: true = true;
+  readonly isAsync: true = true;
   readonly source: ReadableStream;
+  readonly events: SimpleEventEmitter<baseStreamEvents>;
   reader: ReadableStreamDefaultReader;
 
   constructor(source: ReadableStream) {
     super();
     this.source = source;
     this.reader = this.source.getReader();
+    this.events = new SimpleEventEmitter();
   }
 
   async _pull(ideal: number): Promise<Uint8Array<ArrayBufferLike>> {

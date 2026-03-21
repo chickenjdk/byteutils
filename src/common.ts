@@ -395,6 +395,7 @@ export function wrapForLockIfNeeded<T>(
       return result;
     })();
   } else {
+    // @ts-ignore
     return cb();
   }
 }
@@ -403,7 +404,9 @@ export type SimpleEventListener<T, N extends string> = (
   arg: T,
   name: N,
 ) => void;
-export type EventMap = { [name: string]: SimpleEventListener<any, any> };
+export type EventMap = {
+  [key: string]: SimpleEventListener<any, any>;
+};
 export type EventsStorage<M extends EventMap> = {
   [T in keyof M]:
     | {
@@ -413,7 +416,9 @@ export type EventsStorage<M extends EventMap> = {
     | undefined;
 };
 
-export class SimpleEventEmitter<M extends EventMap = EventMap> {
+export class SimpleEventEmitter<
+  M extends { [K in Extract<keyof M, string>]: SimpleEventListener<any, K> },
+> {
   #events: EventsStorage<M> = {} as any;
   /**
    * Append a one-time listener
@@ -432,6 +437,23 @@ export class SimpleEventEmitter<M extends EventMap = EventMap> {
   on<T extends Extract<keyof M, string>>(name: T, callback: M[T]) {
     this.#events[name] ??= [];
     this.#events[name].push({ type: "on", callback });
+  }
+  /**
+   * Remove listener(s) from an event by the callback
+   * @param name Event name
+   * @param callback Callback
+   */
+  off<T extends Extract<keyof M, string>>(name: T, callback: M[T]) {
+    if (this.#events[name]) {
+      const events = this.#events[name];
+      for (let index = 0; index < events.length; index++) {
+        const element = events[index];
+        if (element.callback === callback) {
+          events.splice(index, 1);
+          index--;
+        }
+      }
+    }
   }
   /**
    * Invoke all listeners for an event sequentially

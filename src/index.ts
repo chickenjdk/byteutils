@@ -1,6 +1,11 @@
 export * from "./readableBuffer.js";
 export * from "./writableBuffer.js";
 export * from "./stream/index.js";
+export * as chunkBuffer from "./chunkBuffer.js";
+export * as chunkReader from "./chunkReader.js";
+export * as fifo from "./fifo.js";
+export * as resizableBuffer from "./resizableBuffer.js";
+export * as dynamicTypedArrays from "./dynamicTypedArrays.js";
 export { addDefaultEndianness } from "./common.js";
 export * as common from "./common.js";
 export * as simplestreams from "./simplestreams/index.js";
