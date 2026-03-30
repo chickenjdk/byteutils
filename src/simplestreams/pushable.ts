@@ -131,6 +131,17 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
       }
     }) as MaybePromise<Uint8Array, IsAsync>;
   }
+
+  _dumpQueue() {
+    return wrapForLockIfNeeded(this.isAsync, this.#lock, () => {
+      const chunks = [];
+      this.#chunkSplitter.flushUsed();
+      while (this.#bufferedLen > 0) {
+        chunks.push(this.#buffersShift());
+      }
+      return maybePromiseResolve(chunks, this.isAsync);
+    });
+  }
 }
 
 export class PushableStreamSource<

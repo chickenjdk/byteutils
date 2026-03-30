@@ -1,4 +1,5 @@
 import {
+  knownPromiseThen,
   LockQueue,
   maybePromiseResolve,
   noDataUint8Array,
@@ -8,6 +9,7 @@ import {
 } from "../common.js";
 import { MaybePromise } from "../types.js";
 import { BaseStream, baseStreamEvents, Sourced } from "./base.js";
+import FIFO from "fast-fifo";
 
 export interface DynamicSourceEvents extends baseStreamEvents {
   sourceChange: SimpleEventListener<void, "sourceChange">;
@@ -25,6 +27,12 @@ export class DynamicSource<IsAsync extends boolean>
   get source() {
     return this.#source;
   }
+  /**
+   * Create a dynamic source.
+   * This relays all pulls to the current source, which may be changed.
+   * If this stream is closed, the current source will be too.
+   * @param isAsync If the class is async
+   */
   constructor(isAsync: IsAsync) {
     super();
     this.isAsync = isAsync;
@@ -40,11 +48,11 @@ export class DynamicSource<IsAsync extends boolean>
       this.events.emit(name, arg);
     }.bind(this);
   }
-  setSource(newSource: BaseStream<IsAsync>): MaybePromise<void, IsAsync> {
+  setSource(newSource: BaseStream<IsAsync> | undefined): MaybePromise<void, IsAsync> {
     // Skip the lock queue if there is not a source left, because those in front of us in the queue are waiting for the source.
     if (this.#source === undefined) {
       this.#source = newSource;
-      this.#source.events.on("pullableStateChange", this.#boundRelayEvent);
+      this.#source?.events.on("pullableStateChange", this.#boundRelayEvent);
       this.events.emit("sourceChange", undefined);
       return maybePromiseResolve(undefined, this.isAsync);
     } else {
@@ -52,7 +60,7 @@ export class DynamicSource<IsAsync extends boolean>
         // @ts-ignore
         this.#source.events.off("pullableStateChange", this.#boundRelayEvent);
         this.#source = newSource;
-        this.#source.events.on("pullableStateChange", this.#boundRelayEvent);
+        this.#source?.events.on("pullableStateChange", this.#boundRelayEvent);
         this.events.emit("sourceChange", undefined);
         return maybePromiseResolve(undefined, this.isAsync);
       });
@@ -73,5 +81,14 @@ export class DynamicSource<IsAsync extends boolean>
         return this.#source.pull(ideal);
       }
     });
+  }
+  _dumpQueue(): MaybePromise<Uint8Array<ArrayBufferLike>[], IsAsync> {
+    return this.#source
+      ? this.#source.destroyDumpQueue()
+      : maybePromiseResolve([], this.isAsync);
+  }
+  close() {
+    super.close();
+    this.#source?.close()
   }
 }

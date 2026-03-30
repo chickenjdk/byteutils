@@ -14,6 +14,8 @@ export abstract class BaseStream<IsAsync extends boolean> {
   #closed: boolean = false;
   close() {
     this.#closed = true;
+    // A stream can't be pulled if it is closed
+    this._setPullableState(false);
   }
   abstract isAsync: IsAsync;
   /**
@@ -34,6 +36,10 @@ export abstract class BaseStream<IsAsync extends boolean> {
    * @param state The pullable state.
    */
   _setPullableState(state: boolean) {
+    // Do nothing if we are closed, as this may be called by reads that were going on before the stream was closed as they finish.
+    if (this.#closed) {
+      return;
+    }
     if (this.#pullable !== state) {
       this.#pullable = state;
       this.events.emit("pullableStateChange", state);
@@ -60,6 +66,19 @@ export abstract class BaseStream<IsAsync extends boolean> {
     }
     // @ts-ignore
     return this._pull(...arguments);
+  }
+  /**
+   * Dump all of the queued data (this is called when the class is being destroyed, and will only be called once, so feel free to mess up your class to do this)
+   * If a read is pending, wait on it.
+   * @private
+   */
+  abstract _dumpQueue(): MaybePromise<Uint8Array[], IsAsync>;
+  /**
+   * Close the stream, and return all of the queued data
+   */
+  destroyDumpQueue() {
+    this.close();
+    return this._dumpQueue();
   }
 }
 
