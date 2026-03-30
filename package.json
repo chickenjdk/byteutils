@@ -1,11 +1,17 @@
 {
   "name": "@chickenjdk/byteutils",
-  "version": "3.4.0",
+  "version": "3.4.2",
   "description": "Advanced tools for manipulating binary data in JavaScript",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
   "scripts": {
-    "build": "tsc",
+    "build": "node builder/esbuild-run.mjs; npx tsc",
     "docs": "typedoc --options typedoc.json"
   },
   "repository": {
@@ -22,12 +28,18 @@
   },
   "homepage": "https://github.com/chickenjdk/byteutils#readme",
   "devDependencies": {
+    "@babel/cli": "^7.28.6",
+    "@babel/core": "^7.29.0",
+    "@babel/preset-env": "^7.29.0",
+    "@types/fast-fifo": "^1.3.0",
     "@types/node": "^22.15.29",
+    "esbuild": "^0.27.3",
     "typedoc": "^0.28.5",
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@chickenjdk/common": "^2.1.1",
+    "@chickenjdk/common": "^2.2.0",
+    "fast-fifo": "^1.3.2",
     "mutf-8": "^1.2.0"
   }
 }
