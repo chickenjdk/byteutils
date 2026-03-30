@@ -83,6 +83,16 @@ export class TypedArrayView implements Uint8Array {
   get byteLength() {
     return this.length * this.BYTES_PER_ELEMENT;
   }
+  /**
+   * A view on dynamically allocated memory.
+   * DISCLAIMER: THIS DOES NOT SAVE YOU MEMORY, THE OS DOES THIS
+   * However, this can tell you which chunks are allocated if your backend allows it, unlike the javascript engine.
+   * @param length The virtual length of the typed array
+   * @param backend The memory backend of your choosing to view
+   * @param byteOffset The offset from the start of the memory backend in which to start the array. This is the bytes offset, NOT the element length offset.
+   * @param bytesPerElement How many bytes are in an element. IMPLEMENTERS: fill out this parameter in your super call
+   * @returns
+   */
   constructor(
     length: number,
     backend: TypedArrayMemoryBackend,
@@ -124,7 +134,7 @@ export class TypedArrayView implements Uint8Array {
    * @param i The index
    * @returns The starting index into the buffer
    */
-  _byteIndex(i: number) {
+  private _byteIndex(i: number) {
     return this.byteOffset + i * this.BYTES_PER_ELEMENT;
   }
 
