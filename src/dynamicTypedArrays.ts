@@ -1,3 +1,5 @@
+import { isNaNSafe } from "./common.js";
+
 export type byteLike = number;
 export type bytesLike = Uint8Array | ArrayLike<number> | TypedArrayView;
 
@@ -106,7 +108,7 @@ export class TypedArrayView implements Uint8Array {
 
     return new Proxy(this, {
       get(target, prop) {
-        if (!isNaN(prop as unknown as number)) {
+        if (!isNaNSafe(prop)) {
           const i = Number(prop);
           if (i < 0 || i >= target.length) return undefined;
           return target._read(i);
@@ -116,7 +118,7 @@ export class TypedArrayView implements Uint8Array {
       },
 
       set(target, prop, value) {
-        if (!isNaN(prop as unknown as number)) {
+        if (!isNaNSafe(prop)) {
           const i = Number(prop);
           if (i < 0 || i >= target.length) return false;
           target._write(i, value);

@@ -562,3 +562,11 @@ export class LockQueue {
     this.#queue = [];
   }
 }
+
+export function isNaNSafe(value: any) {
+  try {
+    return isNaN(value);
+  } catch {
+    return true;
+  }
+}
