@@ -2,6 +2,9 @@ import * as esbuild from "esbuild";
 import { asyncHelperLowering } from "./plugin.mjs";
 import { readdirSync, statSync } from "fs";
 import { join } from "path";
+import { classIdPlugin } from "./classid.mjs";
+import { importRewritePlugin } from "./import-rewrite.mjs";
+import { babelTransformers } from "./babel-transformers.mjs";
 
 const noUtilPlugin = {
   name: "util-blackhole",
@@ -40,7 +43,13 @@ function readDirAll(path) {
   bundle: true,
   outfile: "./dist/bundles/bundle.iife.js",
   entryPoints: ["./src/index.ts"],
-  plugins: [asyncHelperLowering(), noUtilPlugin],
+  plugins: [
+    babelTransformers([
+      asyncHelperLowering(),
+      classIdPlugin({ filesRoot: "./src" }),
+    ]),
+    noUtilPlugin,
+  ],
   format: "iife",
   sourcemap: "linked",
 });
@@ -50,7 +59,13 @@ esbuild.build({
   bundle: true,
   outfile: "./dist/bundles/bundle.esm.js",
   entryPoints: ["./src/index.ts"],
-  plugins: [asyncHelperLowering(), noUtilPlugin],
+  plugins: [
+    babelTransformers([
+      asyncHelperLowering(),
+      classIdPlugin({ filesRoot: "./src" }),
+    ]),
+    noUtilPlugin,
+  ],
   format: "esm",
   sourcemap: "linked",
 });*/
@@ -60,9 +75,16 @@ esbuild.build({
   bundle: false,
   outdir: "./dist/esm",
   entryPoints: readDirAll("./src"),
-  plugins: [asyncHelperLowering()],
+  plugins: [
+    babelTransformers([
+      importRewritePlugin({ fileType: ".mjs" }),
+      asyncHelperLowering(),
+      classIdPlugin({ filesRoot: "./src" }),
+    ]),
+  ],
   format: "esm",
   sourcemap: "linked",
+  outExtension: { ".js": ".mjs" },
 });
 
 esbuild.build({
@@ -70,9 +92,16 @@ esbuild.build({
   bundle: false,
   outdir: "./dist/cjs",
   entryPoints: readDirAll("./src"),
-  plugins: [asyncHelperLowering()],
+  plugins: [
+    babelTransformers([
+      importRewritePlugin({ fileType: ".cjs" }),
+      asyncHelperLowering(),
+      classIdPlugin({ filesRoot: "./src" }),
+    ]),
+  ],
   format: "cjs",
   sourcemap: "linked",
+  outExtension: { ".js": ".cjs" },
 });
 
 console.log("Finished build!");
