@@ -56,24 +56,108 @@ export function classIdPlugin(options = {}) {
           t.identifier("Symbol.hasInstance"),
           [t.identifier("instance")],
           t.blockStatement([
-            t.returnStatement(
-              t.binaryExpression(
-                "===",
+            t.variableDeclaration("let", [
+              t.variableDeclarator(
+                t.identifier("current"),
                 t.optionalMemberExpression(
-                  t.optionalMemberExpression(
-                    t.identifier("instance"),
-                    t.identifier("constructor"),
-                    false,
-                    true,
-                  ),
-                  t.identifier("____classID____"),
+                  t.identifier("instance"),
+                  t.identifier("constructor"),
                   false,
                   true,
                 ),
-                t.memberExpression(
-                  t.identifier(className),
-                  t.identifier("____classID____"),
+              ),
+            ]),
+
+            // const constructors = /* @__PURE__ */ new Set([current]);
+            t.variableDeclaration("const", [
+              t.variableDeclarator(
+                t.identifier("constructors"),
+                t.newExpression(t.identifier("Set"), [
+                  t.arrayExpression([t.identifier("current")]),
+                ]),
+              ),
+            ]),
+
+            // if (current === void 0) return;
+            t.ifStatement(
+              t.binaryExpression(
+                "===",
+                t.identifier("current"),
+                t.unaryExpression("void", t.numericLiteral(0)),
+              ),
+              t.blockStatement([t.returnStatement()]),
+            ),
+
+            // while (current !== null)
+            t.whileStatement(
+              t.binaryExpression(
+                "!==",
+                t.identifier("current"),
+                t.nullLiteral(),
+              ),
+              t.blockStatement([
+                // current = Object.getPrototypeOf(current);
+                t.expressionStatement(
+                  t.assignmentExpression(
+                    "=",
+                    t.identifier("current"),
+                    t.callExpression(
+                      t.memberExpression(
+                        t.identifier("Object"),
+                        t.identifier("getPrototypeOf"),
+                      ),
+                      [t.identifier("current")],
+                    ),
+                  ),
                 ),
+                // constructors.add(current);
+                t.expressionStatement(
+                  t.callExpression(
+                    t.memberExpression(
+                      t.identifier("constructors"),
+                      t.identifier("add"),
+                    ),
+                    [t.identifier("current")],
+                  ),
+                ),
+              ]),
+            ),
+
+            // return Array.from(constructors).map(...).includes(${className}.____classID____);
+            t.returnStatement(
+              t.callExpression(
+                t.memberExpression(
+                  t.callExpression(
+                    t.memberExpression(
+                      t.callExpression(
+                        t.memberExpression(
+                          t.identifier("Array"),
+                          t.identifier("from"),
+                        ),
+                        [t.identifier("constructors")],
+                      ),
+                      t.identifier("map"),
+                    ),
+                    [
+                      t.arrowFunctionExpression(
+                        [t.identifier("value")],
+                        t.optionalMemberExpression(
+                          t.identifier("value"),
+                          t.identifier("____classID____"),
+                          false,
+                          true,
+                        ),
+                      ),
+                    ],
+                  ),
+                  t.identifier("includes"),
+                ),
+                [
+                  t.memberExpression(
+                    t.identifier(className),
+                    t.identifier("____classID____"),
+                  ),
+                ],
               ),
             ),
           ]),
