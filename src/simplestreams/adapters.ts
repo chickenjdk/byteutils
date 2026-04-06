@@ -1,7 +1,7 @@
 import { Readable } from "stream";
 import { PushableStreamBase } from "./pushable.js";
 import { BaseStream, baseStreamEvents } from "./base.js";
-import { SimpleEventEmitter } from "../common.js";
+import { maybePromiseResolve, noDataUint8Array, SimpleEventEmitter } from "../common.js";
 
 export class NodejsStreamIAdapter extends PushableStreamBase<true, Readable> {
   readonly isAsync: true = true;
@@ -68,6 +68,9 @@ export class WhatwgStreamIAdapter extends BaseStream<true> {
       this.close();
     }
     return result.value;
+  }
+  _dumpQueue(): Promise<Uint8Array<ArrayBufferLike>[]> {
+    return maybePromiseResolve([noDataUint8Array], true)
   }
 }
 
