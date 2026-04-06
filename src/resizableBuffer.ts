@@ -23,6 +23,9 @@ export abstract class ResizableBufferBase implements TypedArrayMemoryBackend {
   get allocatedLength() {
     return this.#allocated;
   }
+  get #maxIndex() {
+    return this.#allocated - 1;
+  }
   readonly length: number = Infinity;
   #chunkSize: number;
   get chunkSize() {
@@ -103,14 +106,15 @@ export abstract class ResizableBufferBase implements TypedArrayMemoryBackend {
   /**
    * Transform our buffers, making it look like our data fits perfectly and starts at 0 in the buffers.
    * @param indexStart The start index.
-   * @param indexEnd The end index.
+   * @param indexEnd The end index. (exclusive)
    * @returns The transformed buffers
    */
   #localizeBuffers(indexStart: number, indexEnd: number) {
     // +1 to make it inclusive
     const usingBuffers = this.#buffers.slice(
       this._getBufferPosition(indexStart),
-      this._getBufferPosition(indexEnd) + 1,
+      // -1 because getBufferPosition takes inclusive indexes
+      this._getBufferPosition(indexEnd - 1) + 1,
     );
 
     // Transform the buffers to look like indexStart to indexEnd is all we are storing (by rewriting the indexes and subarraying)
@@ -171,7 +175,8 @@ export abstract class ResizableBufferBase implements TypedArrayMemoryBackend {
         buffer.data.set(
           value instanceof Uint8Array
             ? value.subarray(buffer.startIndex, buffer.endIndex)
-            : Array.prototype.slice.call(
+            : // Check for a DynamicTypedArray?
+              Array.prototype.slice.call(
                 value,
                 buffer.startIndex,
                 buffer.endIndex,
@@ -202,7 +207,7 @@ export abstract class ResizableBufferBase implements TypedArrayMemoryBackend {
    * @returns The byte
    */
   read(index: number) {
-    if (index > this.#allocated - 1) {
+    if (index > this.#maxIndex) {
       return 0;
     } else {
       const chunkIndex = this._getBufferPosition(index);
@@ -215,13 +220,14 @@ export abstract class ResizableBufferBase implements TypedArrayMemoryBackend {
    * Get an array of subarrays of the internal buffers! (WARNING: mutations will edit the data in this instance)
    * Like .get, but does not join the chunks.
    * Also does not give you more data than we really have, making the "infinite length buffer" abstraction leaky but allocatedLength does that too.
-   * @param indexStart The starting index
-   * @param indexEnd The ending index
+   * @param indexStart The starting index (inclusive)
+   * @param indexEnd The ending index (exclusive)
    * @returns Your buffers, fresh off .subarray
    */
   getBuffers(indexStart: number, indexEnd: number) {
-    if (indexEnd > this.#allocated - 1) {
-      indexEnd = this.#allocated - 1;
+    // indexEnd is exclusive, and therefore the maximum is the length, not the index
+    if (indexEnd > this.#allocated) {
+      indexEnd = this.#allocated;
     }
 
     const usingBuffersTransformed = this.#localizeBuffers(indexStart, indexEnd);
