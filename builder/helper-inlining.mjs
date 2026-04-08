@@ -1,17 +1,13 @@
 // knownHelpersPlugin.js
-import fs from "node:fs/promises";
-import { parse } from "@babel/parser";
 import traverse from "@babel/traverse";
-import generate from "@babel/generator";
 import * as t from "@babel/types";
 
-const COMMON_RE = /common(\.js)?$/;
+const COMMON_RE = /common(\..?js)?$/;
 
 /**
- * Lower the async helpers for performance
- * @returns {import("esbuild").Plugin}
+ * Inline some of the helpers for performance
  */
-export function asyncHelperLowering() {
+export function helperInlining() {
   return function (ast) {
     // Identifier -> helper kind
     const helpers = new Map();

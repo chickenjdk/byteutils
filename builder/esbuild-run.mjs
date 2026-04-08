@@ -1,5 +1,5 @@
 import * as esbuild from "esbuild";
-import { asyncHelperLowering } from "./plugin.mjs";
+import { helperInlining } from "./helper-inlining.mjs";
 import { readdirSync, statSync } from "fs";
 import { join } from "path";
 import { classIdPlugin } from "./classid.mjs";
@@ -78,7 +78,7 @@ esbuild.build({
   plugins: [
     babelTransformers([
       importRewritePlugin({ fileType: ".mjs" }),
-      asyncHelperLowering(),
+      helperInlining(),
       classIdPlugin({ filesRoot: "./src" }),
     ]),
   ],
@@ -95,7 +95,7 @@ esbuild.build({
   plugins: [
     babelTransformers([
       importRewritePlugin({ fileType: ".cjs" }),
-      asyncHelperLowering(),
+      helperInlining(),
       classIdPlugin({ filesRoot: "./src" }),
     ]),
   ],
