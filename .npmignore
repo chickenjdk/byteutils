@@ -7,3 +7,5 @@ docs/
 .github/
 .vscode/
 test/
+builder/
+.editorconfig
