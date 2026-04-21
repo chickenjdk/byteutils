@@ -9,12 +9,12 @@ import { babelTransformers } from "./babel-transformers.mjs";
 const noUtilPlugin = {
   name: "util-blackhole",
   setup(build) {
-    // Step 1: intercept imports
+    // Add namespace to imports
     build.onResolve({ filter: /^util$/ }, (args) => {
       return { path: args.path, namespace: "util-blackhole" };
     });
 
-    // Step 2: provide the polyfill code
+    // Return no code for all imports
     build.onLoad({ filter: /.*/, namespace: "util-blackhole" }, () => {
       return {
         contents: ``,
