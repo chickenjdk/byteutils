@@ -4,3 +4,4 @@ export * as pushable from "./pushable.js";
 export * as transform from "./transform.js";
 export * as dynamicSource from "./dynamicSource.js";
 export * as pullPusher from "./pullPusher.js";
+export * as tee from "./tee.js";
