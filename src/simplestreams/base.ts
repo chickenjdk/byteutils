@@ -4,6 +4,7 @@ import { MaybePromise } from "../types.js";
 
 export interface baseStreamEvents {
   pullableStateChange: SimpleEventListener<boolean, "pullableStateChange">;
+  close: SimpleEventListener<void, "close">;
 }
 
 export abstract class BaseStream<IsAsync extends boolean> {
@@ -16,6 +17,7 @@ export abstract class BaseStream<IsAsync extends boolean> {
     this.#closed = true;
     // A stream can't be pulled if it is closed
     this._setPullableState(false);
+    this.events.emit("close", undefined);
   }
   abstract isAsync: IsAsync;
   /**
