@@ -29,6 +29,11 @@ export class readableStream<
   get _chunks(): Uint8Array[] {
     return this.#chunkQueue;
   }
+  get _queued(): Uint8Array[] {
+    const clone = [...this.#chunkQueue];
+    clone[0] = clone[0].subarray(this.#chunkIdx);
+    return clone;
+  }
   events: SimpleEventEmitter<readableStreamEventMap>;
   /**
    * Add a on drain listener to the stream
