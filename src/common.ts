@@ -1,6 +1,10 @@
 import type { AwaitedUnion, MaybePromise } from "./types.js";
 import { log } from "@chickenjdk/common";
-import { ExpectedAsyncError, ExpectedSyncError } from "./errors.js";
+import {
+  ErrorLockError,
+  ExpectedAsyncError,
+  ExpectedSyncError,
+} from "./errors.js";
 // Buffers for converting numbers!
 export const float32Array = new Float32Array(1);
 export const uint8Float32ArrayView = new Uint8Array(float32Array.buffer);
@@ -563,6 +567,45 @@ export class LockQueue {
   }
 }
 
+export class ErrorLock {
+  #locked: boolean = false;
+  #closed: boolean = false;
+  #acquireError: Error | undefined = undefined; // The error to throw when a lock acquisition is attempted and #closed is true
+  /**
+   * If the queue is closed
+   */
+  get closed() {
+    return this.#closed;
+  }
+  /**
+   * Acquire the lock
+   * @returns A promise that resolves when you have the lock, or rejects when the queue is closed
+   */
+  acquire() {
+    if (this.#closed) {
+      throw this.#acquireError;
+    } else if (!this.#locked) {
+      this.#locked = true;
+    } else {
+      throw new ErrorLockError("Item is locked, but tried to acquire");
+    }
+  }
+  /**
+   * Release the lock
+   */
+  release() {
+    this.#locked = false;
+  }
+  /**
+   * Throw another whenever an acquisition is attempted
+   * @param error The error to be thrown for all waiting for the lock
+   * @param acquireError The error to throw whenever anyone tries to acquire the lock
+   */
+  close(error: Error, acquireError: Error) {
+    this.#closed = true;
+    this.#acquireError = acquireError;
+  }
+}
 export function isNaNSafe(value: any) {
   try {
     return isNaN(value);

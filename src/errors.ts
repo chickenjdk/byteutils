@@ -18,3 +18,9 @@ export const StreamClosedError = createClassifiedError(
   ByteutilsError,
   true,
 );
+
+export const ErrorLockError = createClassifiedError(
+  "ErrorLock",
+  ByteutilsError,
+  true,
+);
