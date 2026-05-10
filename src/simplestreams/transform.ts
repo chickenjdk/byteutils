@@ -6,9 +6,13 @@ export abstract class Transform<IsAsync extends boolean>
   implements Sourced<StreamHandle<IsAsync>>
 {
   readonly source: StreamHandle<IsAsync>;
-  constructor(source: BaseStream<IsAsync>, isAsync: IsAsync) {
+  constructor(
+    source: BaseStream<IsAsync>,
+    isAsync: IsAsync,
+    streamHandleClass: typeof StreamHandle = StreamHandle,
+  ) {
     super();
-    this.source = new StreamHandle(source, isAsync);
+    this.source = new streamHandleClass(source, isAsync);
     this.isAsync = isAsync;
   }
   isAsync: IsAsync;
