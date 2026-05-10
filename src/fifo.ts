@@ -24,7 +24,7 @@ export class BytesFIFOChunkBuffer extends ChunkTransformerWithDataCallback<false
       }
     }
     if (allocated === undefined) {
-      return new Uint8Array(this.chunkSize);
+      return new Uint8Array(this.newChunkSize);
     } else {
       return allocated;
     }
