@@ -1,0 +1,25 @@
+# .github/workflows/build-dev.yml
+
+name: Build development release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. v1.2.3)'
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  deploy:
+    uses: chickenjdk/github-actions-workflows/.github/workflows/deploy-dev-docs.yml@main
+    with:
+      node-version: '24'
+      docs-dir: './docs'
+      version: ${{ inputs['version'] }}
+    secrets:
+      STATIC_CONTENT_TOKEN: ${{ secrets.STATIC_CONTENT_TOKEN }}
