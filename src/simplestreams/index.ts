@@ -6,3 +6,4 @@ export * as dynamicSource from "./dynamicSource.js";
 export * as pullPusher from "./pullPusher.js";
 export * as tee from "./tee.js";
 export * as adapters from "./adapters.js";
+export * as dynamicOutput from "./dynamicOutput.js";
