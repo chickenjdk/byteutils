@@ -4,6 +4,7 @@ import {
   knownPromiseThen,
   LockQueue,
   maybePromiseResolve,
+  noDataUint8Array,
   wrapForLockIfNeeded,
 } from "./common.js";
 import { readableBufferBase } from "./readableBuffer.js";
@@ -13,10 +14,30 @@ export abstract class ChunkReader<
   IsAsync extends boolean,
 > extends readableBufferBase {
   get chunkDataLeft() {
+    // This is correct because the chunk index should be the index that the next byte should be read from
     return Math.max((this.#chunk?.length ?? 0) - this.#chunkIndex, 0);
   }
 
-  #chunk!: Uint8Array;
+  /**
+   * Consume and output a chunk, if one is present.
+   * @returns The chunk. Will be an empty Uint8Array if no chunk is present.
+   */
+  consumeChunk() {
+    return wrapForLockIfNeeded(this.isAsync, this.#lock, () => {
+      if (this.#chunk) {
+        const startIndex = this.#chunkIndex;
+        this.#chunkIndex = this.#chunk.length;
+        return maybePromiseResolve(
+          this.#chunk.subarray(startIndex),
+          this.isAsync,
+        );
+      } else {
+        return maybePromiseResolve(noDataUint8Array, this.isAsync);
+      }
+    });
+  }
+
+  #chunk: Uint8Array | undefined;
   #chunkIndex: number = 0;
   isAsync: IsAsync;
   // @ts-ignore
@@ -59,7 +80,8 @@ export abstract class ChunkReader<
               this.#guaranteeChunk(left),
               () => {
                 if (this.chunkDataLeft >= left) {
-                  const data = this.#chunk.slice(
+                  // This is safe because guaranteeChunk should have made the chunk available and no one else should have touched it due to the lock
+                  const data = this.#chunk!.slice(
                     this.#chunkIndex,
                     (this.#chunkIndex += left),
                   );
@@ -67,7 +89,7 @@ export abstract class ChunkReader<
                   index += left;
                   chunks.push(data);
                 } else {
-                  const data = this.#chunk.slice(this.#chunkIndex);
+                  const data = this.#chunk!.slice(this.#chunkIndex);
                   this.#chunkIndex += data.length;
                   left -= data.length;
                   index += data.length;
@@ -122,7 +144,7 @@ export abstract class ChunkReader<
         this.#guaranteeChunk(1),
       ),
       () => {
-        return this.#chunk[this.#chunkIndex++];
+        return this.#chunk![this.#chunkIndex++];
       },
       this.isAsync,
     );
