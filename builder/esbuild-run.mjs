@@ -1,107 +1,17 @@
-import * as esbuild from "esbuild";
+import { buildIndividual } from "@chickenjdk/build";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { helperInlining } from "./helper-inlining.mjs";
-import { readdirSync, statSync } from "fs";
-import { join } from "path";
-import { classIdPlugin } from "./classid.mjs";
-import { importRewritePlugin } from "./import-rewrite.mjs";
-import { babelTransformers } from "./babel-transformers.mjs";
 
-const noUtilPlugin = {
-  name: "util-blackhole",
-  setup(build) {
-    // Add namespace to imports
-    build.onResolve({ filter: /^util$/ }, (args) => {
-      return { path: args.path, namespace: "util-blackhole" };
-    });
+const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const srcDir = resolve(projectRoot, "src");
+const distDir = resolve(projectRoot, "dist");
 
-    // Return no code for all imports
-    build.onLoad({ filter: /.*/, namespace: "util-blackhole" }, () => {
-      return {
-        contents: ``,
-        loader: "js",
-      };
-    });
-  },
-};
-
-function readDirAll(path) {
-  const items = readdirSync(path);
-  const results = [];
-  for (const item of items) {
-    const itemPath = join(path, item);
-    if (statSync(itemPath).isDirectory()) {
-      results.push(...readDirAll(itemPath));
-    } else {
-      results.push(itemPath);
-    }
-  }
-  return results;
-}
-
-/*esbuild.build({
-  minify: true,
-  bundle: true,
-  outfile: "./dist/bundles/bundle.iife.js",
-  entryPoints: ["./src/index.ts"],
-  plugins: [
-    babelTransformers([
-      asyncHelperLowering(),
-      classIdPlugin({ filesRoot: "./src" }),
-    ]),
-    noUtilPlugin,
-  ],
-  format: "iife",
-  sourcemap: "linked",
+buildIndividual(srcDir, resolve(distDir, "esm"), {
+  outputFormat: "esm",
+  extraBabelPlugins: [helperInlining()],
 });
-
-esbuild.build({
-  minify: true,
-  bundle: true,
-  outfile: "./dist/bundles/bundle.esm.js",
-  entryPoints: ["./src/index.ts"],
-  plugins: [
-    babelTransformers([
-      asyncHelperLowering(),
-      classIdPlugin({ filesRoot: "./src" }),
-    ]),
-    noUtilPlugin,
-  ],
-  format: "esm",
-  sourcemap: "linked",
-});*/
-
-esbuild.build({
-  minify: false,
-  bundle: false,
-  outdir: "./dist/esm",
-  entryPoints: readDirAll("./src"),
-  plugins: [
-    babelTransformers([
-      importRewritePlugin({ fileType: ".mjs" }),
-      helperInlining(),
-      classIdPlugin({ filesRoot: "./src" }),
-    ]),
-  ],
-  format: "esm",
-  sourcemap: "linked",
-  outExtension: { ".js": ".mjs" },
+buildIndividual(srcDir, resolve(distDir, "cjs"), {
+  outputFormat: "cjs",
+  extraBabelPlugins: [helperInlining()],
 });
-
-esbuild.build({
-  minify: false,
-  bundle: false,
-  outdir: "./dist/cjs",
-  entryPoints: readDirAll("./src"),
-  plugins: [
-    babelTransformers([
-      importRewritePlugin({ fileType: ".cjs" }),
-      helperInlining(),
-      classIdPlugin({ filesRoot: "./src" }),
-    ]),
-  ],
-  format: "cjs",
-  sourcemap: "linked",
-  outExtension: { ".js": ".cjs" },
-});
-
-console.log("Finished build!");
