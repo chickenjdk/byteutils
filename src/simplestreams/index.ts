@@ -7,3 +7,4 @@ export * as tee from "./tee.js";
 export * as adapters from "./adapters.js";
 export * as dynamicOutput from "./dynamicOutput.js";
 export * as prependSource from "./prependSource.js";
+export * as streamSlice from "./streamSlice.js";
