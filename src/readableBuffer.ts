@@ -260,11 +260,11 @@ export abstract class readableBufferBase<
    */
   readString(bytes: number, mutf8: boolean = false) {
     if (mutf8 === true) {
-      return maybePromiseThen(this.readUint8ArrayEndian(bytes), (read) =>
+      return maybePromiseThen(this.readUint8Array(bytes), (read) =>
         decodeMutf8(read),
       );
     }
-    return maybePromiseThen(this.readUint8ArrayEndian(bytes), (read) =>
+    return maybePromiseThen(this.readUint8Array(bytes), (read) =>
       decodeUtf8(read),
     );
   }
