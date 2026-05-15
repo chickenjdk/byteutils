@@ -2,6 +2,7 @@ import { Readable } from "stream";
 import { PushableStreamBase } from "./pushable.js";
 import { BaseStream, baseStreamEvents } from "./base.js";
 import {
+  knownPromiseThen,
   maybePromiseResolve,
   noDataUint8Array,
   SimpleEventEmitter,
@@ -38,18 +39,27 @@ export class NodejsStreamIAdapter extends PushableStreamBase<true, Readable> {
     if (this.lowWaterMark > this.bufferedLen) {
       this.source.resume();
     }
-    return super.pull(ideal);
+    return super._pull(ideal);
   }
 }
 
-export class NodejsStreamOAdapter extends Readable {
-  readonly source: BaseStream<true>;
-  constructor(source: BaseStream<true>) {
+export class NodejsStreamOAdapter<IsAsync extends boolean> extends Readable {
+  readonly source: BaseStream<IsAsync>;
+  constructor(source: BaseStream<IsAsync>) {
     super();
     this.source = source;
+    source.events.once("close", () => {
+      this.push(null);
+    });
   }
   _read(size: number): void {
-    this.push(this.source.pull(size));
+    knownPromiseThen(
+      this.source.pull(size),
+      (chunk) => {
+        this.push(chunk);
+      },
+      this.source.isAsync,
+    );
   }
 }
 
