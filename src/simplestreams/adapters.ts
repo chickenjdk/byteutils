@@ -20,7 +20,7 @@ export class NodejsStreamIAdapter extends PushableStreamBase<true, Readable> {
     {
       highWaterMark = 8000,
       lowWaterMark = 3000,
-    }: { highWaterMark: number; lowWaterMark: number },
+    }: Partial<{ highWaterMark: number; lowWaterMark: number }> = {},
   ) {
     super(true, chunkSize);
     this.highWaterMark = highWaterMark;
