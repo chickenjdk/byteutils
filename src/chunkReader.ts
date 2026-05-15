@@ -20,21 +20,35 @@ export abstract class ChunkReader<
 
   /**
    * Consume and output a chunk, if one is present.
+   * If one is not present, and the guarantee option is true, it will consume a chunk from the source and output that.
+   * @param guarantee If this method should get a chunk from the source if one is not present. False by default.
+   * @param idealChunkSize The ideal chunk size, N/A if guarantee is false.
    * @returns The chunk. Will be an empty Uint8Array if no chunk is present.
    */
-  consumeChunk() {
+  consumeChunk(guarantee = false, idealChunkSize = 2000): MaybePromise<Uint8Array, IsAsync> {
     return wrapForLockIfNeeded(this.isAsync, this.#lock, () => {
-      if (this.#chunk) {
+      const done = () => {
         const startIndex = this.#chunkIndex;
-        this.#chunkIndex = this.#chunk.length;
+        this.#chunkIndex = this.#chunk!.length;
         return maybePromiseResolve(
-          this.#chunk.subarray(startIndex),
+          this.#chunk!.subarray(startIndex),
+          this.isAsync,
+        );
+      };
+      if (guarantee) {
+        return knownPromiseThen(
+          this.#guaranteeChunk(idealChunkSize),
+          done,
           this.isAsync,
         );
       } else {
-        return maybePromiseResolve(noDataUint8Array, this.isAsync);
+        if (this.#chunk) {
+          return done();
+        } else {
+          return maybePromiseResolve(noDataUint8Array, this.isAsync);
+        }
       }
-    });
+    }) as MaybePromise<Uint8Array<ArrayBufferLike>, IsAsync>;
   }
 
   #chunk: Uint8Array | undefined;
