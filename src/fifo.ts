@@ -34,12 +34,15 @@ export class BytesFIFOChunkBuffer extends ChunkTransformerWithDataCallback<false
 export class BytesFIFO extends ChunkReader<false> {
   #spareBuffers: Set<Uint8Array>;
   #buffersFifo: FIFO<Uint8Array>;
+  #buffersFifoLength: number = 0;
   #chunkBuffer: BytesFIFOChunkBuffer;
-  get chunkBufferLength() {
-    return this.#chunkBuffer.length;
-  }
-  get hasChunks() {
-    return !this.#buffersFifo.isEmpty();
+  /**
+   * Get the number of bytes in the FIFO
+   */
+  get size() {
+    return (
+      this.#buffersFifoLength + this.#chunkBuffer.length + this.chunkDataLeft
+    );
   }
   #alloc() {
     if (this.#spareBuffers.size > 0) {
@@ -56,6 +59,7 @@ export class BytesFIFO extends ChunkReader<false> {
       chunkSize,
       (data) => {
         this.#buffersFifo.push(data);
+        this.#buffersFifoLength += data.length;
       },
       this.#alloc.bind(this),
     );
@@ -81,6 +85,7 @@ export class BytesFIFO extends ChunkReader<false> {
     if (data === undefined) {
       throw new Error("This should not happen, but it did :(");
     }
+    this.#buffersFifoLength -= data.length;
     return data;
   }
   /**
