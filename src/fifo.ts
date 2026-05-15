@@ -1,6 +1,5 @@
 import { ChunkTransformerWithDataCallback } from "./chunkBuffer.js";
 import FIFO from "fast-fifo";
-import { joinUint8Arrays } from "./common.js";
 import { ChunkReader } from "./chunkReader.js";
 
 export class BytesFIFOChunkBuffer extends ChunkTransformerWithDataCallback<false> {

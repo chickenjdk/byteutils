@@ -1,4 +1,3 @@
-import FastFIFO from "fast-fifo";
 import {
   knownPromiseThen,
   LockQueue,
@@ -9,7 +8,7 @@ import {
 } from "../common.js";
 import { CanNotWaitDueToSyncError } from "../errors.js";
 import { MaybePromise } from "../types.js";
-import { BaseStream, baseStreamEvents, Sourced } from "./base.js";
+import { BaseStream, Sourced } from "./base.js";
 import { PrependSource } from "./prependSource.js";
 
 // TODO: Make this a DynamicOutputConsumer?

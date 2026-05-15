@@ -1,6 +1,5 @@
 import { ChunkTransformerEmitter } from "../chunkBuffer.js";
 import {
-  joinUint8Arrays,
   LockQueue,
   maybePromiseResolve,
   noDataUint8Array,

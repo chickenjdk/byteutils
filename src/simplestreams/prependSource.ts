@@ -5,7 +5,7 @@ import {
   maybePromiseResolve,
 } from "../common.js";
 import { MaybePromise } from "../types.js";
-import { BaseStream, Sourced, baseStreamEvents } from "./base.js";
+import { BaseStream, baseStreamEvents } from "./base.js";
 import {
   DynamicOutputConsumer,
   DynamicOutputConsumerEventMap,

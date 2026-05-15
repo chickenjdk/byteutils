@@ -1,7 +1,7 @@
 import { ChunkReader } from "../chunkReader.js";
 import { knownPromiseThen, SimpleEventEmitter } from "../common.js";
 import { MaybePromise } from "../types.js";
-import { BaseStream, Sourced } from "./base.js";
+import { BaseStream } from "./base.js";
 import {
   DynamicOutputConsumer,
   DynamicOutputConsumerEventMap,
