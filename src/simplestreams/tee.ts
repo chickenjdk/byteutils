@@ -57,8 +57,8 @@ export class TeeStreamOutput<IsAsync extends boolean>
     return maybePromiseResolve(items, this.isAsync);
   }
 }
-// This class should not be possible to get a reference to an instance of, so is therefore not exported
-abstract class TeeStreamController<IsAsync extends boolean> {
+// Exported because the type can be derived via the constructor params of TeeStreamOutput
+export abstract class TeeStreamController<IsAsync extends boolean> {
   abstract readonly queue: FastFIFO<Uint8Array>;
   abstract getQueue(): FastFIFO<Uint8Array>;
   abstract pullIntoQueue(ideal: number): MaybePromise<void, IsAsync>;

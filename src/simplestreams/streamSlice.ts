@@ -74,8 +74,7 @@ export class StreamSlicer<
   /**
    * Create streams that have a predetermined amount of data from the source, then close.
    * If a stream does not read data, this blocks all other streams from getting any, even if the backend already has data.
-   * @param source
-   * @param isAsync
+   * @param isAsync If the class is async
    */
   constructor(isAsync: IsAsync) {
     this.isAsync = isAsync;

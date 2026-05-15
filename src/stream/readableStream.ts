@@ -9,7 +9,7 @@ import {
   SimpleEventListener,
 } from "../common.js";
 import { StreamEndedError } from "./errors.js";
-type readableStreamEventMap = {
+export type readableStreamEventMap = {
   data: SimpleEventListener<undefined, "data">;
   drain: SimpleEventListener<undefined, "drain">;
   close: SimpleEventListener<undefined, "close">;

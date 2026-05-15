@@ -108,7 +108,8 @@ export function wrapForPromiseKnown<IsAsync extends boolean, V>(
 }
 /**
  * Like maybeAsyncCallArr, but it outputs a wrapped version of value, not the results of the function calls.
- * @param awaiter The value to await (may not actually be a promise, if not returns value with no wrapping)
+ * @param func A function that may or may not return a promise
+ * @param params The array of parameters to call the function with
  * @param value The value to return
  */
 export function wrapForAsyncCallArr<
