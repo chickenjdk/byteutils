@@ -35,6 +35,9 @@ export class NodejsStreamIAdapter extends PushableStreamBase<true, Readable> {
         this.source.pause();
       }
     });
+    this.source.once("close", () => {
+      this.close();
+    });
   }
   _pull(ideal: number): Promise<Uint8Array<ArrayBufferLike>> {
     if (this.lowWaterMark > this.bufferedLen) {
