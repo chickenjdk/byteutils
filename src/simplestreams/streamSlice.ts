@@ -63,11 +63,9 @@ export class StreamSlice<IsAsync extends boolean> extends BaseStream<IsAsync> {
   }
 }
 // Can make switchable because it does have a stream as a source
-export class StreamSlicer<IsAsync extends boolean>
-  implements
-    Sourced<BaseStream<IsAsync> | undefined>,
-    DynamicOutputConsumer<IsAsync>
-{
+export class StreamSlicer<
+  IsAsync extends boolean,
+> implements DynamicOutputConsumer<IsAsync> {
   readonly source: BaseStream<IsAsync> | undefined;
   readonly isAsync: IsAsync;
   readonly events: SimpleEventEmitter<DynamicOutputConsumerEventMap>;
