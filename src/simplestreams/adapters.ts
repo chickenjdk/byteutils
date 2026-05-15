@@ -3,9 +3,11 @@ import { PushableStreamBase } from "./pushable.js";
 import { BaseStream, baseStreamEvents } from "./base.js";
 import {
   knownPromiseThen,
+  maybePromiseResolve,
   noDataUint8Array,
   SimpleEventEmitter,
 } from "../common.js";
+import { MaybePromise } from "../types.js";
 
 export class NodejsStreamIAdapter extends PushableStreamBase<true, Readable> {
   readonly isAsync: true = true;
@@ -44,15 +46,17 @@ export class NodejsStreamIAdapter extends PushableStreamBase<true, Readable> {
 
 export class NodejsStreamOAdapter<IsAsync extends boolean> extends Readable {
   readonly source: BaseStream<IsAsync>;
+  #wait: MaybePromise<void, IsAsync> | undefined;
   constructor(source: BaseStream<IsAsync>) {
     super();
     this.source = source;
-    source.events.once("close", () => {
+    source.events.once("close", async () => {
+      await this.#wait;
       this.push(null);
     });
   }
   _read(size: number): void {
-    knownPromiseThen(
+    this.#wait = knownPromiseThen(
       this.source.pull(size),
       (chunk) => {
         this.push(chunk);
