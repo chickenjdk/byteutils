@@ -1,6 +1,7 @@
 import { MaybePromise } from "../types.js";
 import { BaseStream, Sourced } from "./base.js";
 
+// Can not make switchable because the pusher can not take data back
 export abstract class PullPusher<IsAsync extends boolean> implements Sourced<
   BaseStream<IsAsync>
 > {

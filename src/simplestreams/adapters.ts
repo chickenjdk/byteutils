@@ -71,10 +71,11 @@ export class WhatwgStreamIAdapter extends BaseStream<true> {
     if (result.done) {
       this.close();
     }
-    return result.value;
-  }
-  _dumpQueue(): Promise<Uint8Array<ArrayBufferLike>[]> {
-    return maybePromiseResolve([noDataUint8Array], true);
+    if (result.value === undefined) {
+      return noDataUint8Array;
+    } else {
+      return result.value;
+    }
   }
   close() {
     super.close();

@@ -13,6 +13,7 @@ import { writableBufferBase } from "../writableBuffer.js";
 import { BaseStream, baseStreamEvents, Sourced } from "./base.js";
 import FIFO from "fast-fifo";
 
+// Can not make switchable because the source is not a stream
 export abstract class PushableStreamBase<IsAsync extends boolean, Source>
   extends BaseStream<IsAsync>
   implements Sourced<Source>
@@ -130,17 +131,6 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
         }
       }
     }) as MaybePromise<Uint8Array, IsAsync>;
-  }
-
-  _dumpQueue() {
-    return wrapForLockIfNeeded(this.isAsync, this.#lock, () => {
-      const chunks = [];
-      this.#chunkSplitter.flushUsed();
-      while (this.#bufferedLen > 0) {
-        chunks.push(this.#buffersShift());
-      }
-      return maybePromiseResolve(chunks, this.isAsync);
-    });
   }
 }
 
