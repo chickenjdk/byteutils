@@ -42,11 +42,11 @@ export abstract class readableBufferBase<
    * Read a ReadableBuffer from the start of the buffer
    * @param bytes How many bytes to read
    */
-  readReadableBuffer(bytes: number) {
+  readReadableBuffer(bytes: number): MaybePromise<readableBuffer, IsAsync> {
     return maybePromiseThen(
       this.readUint8Array(bytes),
       (read) => new readableBuffer(read),
-    );
+    ) as MaybePromise<readableBuffer, IsAsync>;
   }
   /**
    * Read a number array (0-255) from the start of the buffer
