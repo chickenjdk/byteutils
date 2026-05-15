@@ -19,6 +19,18 @@ export const StreamClosedError = createClassifiedError(
   true,
 );
 
+export const OperationUnavailableError = createClassifiedError(
+  "Operation is unavailable",
+  ByteutilsError,
+  true,
+);
+
+export const CanNotWaitDueToSyncError = createClassifiedError(
+  "Can not wait in sync mode",
+  ByteutilsError,
+  true,
+);
+
 export const ErrorLockError = createClassifiedError(
   "ErrorLock",
   ByteutilsError,
