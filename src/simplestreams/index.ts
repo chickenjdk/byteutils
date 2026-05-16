@@ -9,3 +9,4 @@ export * as dynamicOutput from "./dynamicOutput.js";
 export * as prependSource from "./prependSource.js";
 export * as streamSlice from "./streamSlice.js";
 export * as unsafeOutput from "./unsafeOutput.js";
+export * as dynamicSource from "./dynamicSource.js";

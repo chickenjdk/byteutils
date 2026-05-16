@@ -60,7 +60,7 @@ export abstract class BaseStream<IsAsync extends boolean> {
   /**
    * Grab some data from the stream.
    * @param ideal The ideal amount of data. Implementers should ignore this if there data is chunked, and instead give the whole chunk. If they do not yet have a full chunk, give what you have.
-   * @returns Uint8Array containing the data, but if there will be more data, there just is not yet, AND the stream is sync, it will give undefined.
+   * @returns Uint8Array containing the data, but if the stream is sync and no data is present, it should throw a CanNotWaitDueToSyncError
    */
   pull(ideal: number): MaybePromise<Uint8Array, IsAsync> {
     if (this.#closed && this._doPullCheck) {
