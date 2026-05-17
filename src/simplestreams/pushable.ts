@@ -81,15 +81,15 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
    * Called whenever we are out of data.
    * If overriding this method for any reason, make sure to call the one from this class at the start to allow its checks to work
    * @private
+   * @return If null should be returned
    */
-  _handleDataStarvation(): void {
+  _handleDataStarvation(): boolean {
     this._setPullableState(false);
     if (this.closed) {
       this._doPullCheck = true;
-      throw new StreamClosedError(
-        "Stream is closed, and no data is left in the pushable source, but tried to pull from it.",
-      );
+      return true;
     }
+    return false;
   }
   #buffersShift() {
     const data = this.#buffers.shift()!;
@@ -108,16 +108,28 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
       } else {
         // Not enough for ideal
         // Needs more data
-        this._handleDataStarvation();
+        if (this._handleDataStarvation()) {
+          return null;
+        }
         if (this.isAsync) {
           return (async () => {
-            await new Promise<void>((resolve) => {
-              this.#chunkSplitter.emitter.once("lengthChange", (amount) => {
+            const shouldNull = await new Promise<boolean>((resolve) => {
+              const closeCb = () => {
+                resolve(true);
+              };
+              this.events.once("close", closeCb);
+              const lengthCb = (amount: number) => {
                 if (this.#buffers.length > 0 || amount > 0) {
-                  resolve();
+                  this.events.off("close", closeCb);
+                  this.#chunkSplitter.emitter.off("lengthChange", lengthCb);
+                  resolve(false);
                 }
-              });
+              };
+              this.#chunkSplitter.emitter.on("lengthChange", lengthCb);
             });
+            if (shouldNull) {
+              return null;
+            }
             if (this.#buffers.length > 0) {
               return this.#buffersShift();
             } else {

@@ -21,12 +21,12 @@ export class StreamSlice<IsAsync extends boolean> extends BaseStream<IsAsync> {
   #pull: (
     ideal: number,
     max: number,
-  ) => MaybePromise<Uint8Array<ArrayBufferLike>, IsAsync>;
+  ) => MaybePromise<Uint8Array<ArrayBufferLike> | null, IsAsync>;
   constructor(
     pull: (
       ideal: number,
       max: number,
-    ) => MaybePromise<Uint8Array<ArrayBufferLike>, IsAsync>,
+    ) => MaybePromise<Uint8Array<ArrayBufferLike> | null, IsAsync>,
     readLimit: number,
     isAsync: IsAsync,
   ) {
@@ -45,7 +45,7 @@ export class StreamSlice<IsAsync extends boolean> extends BaseStream<IsAsync> {
         this.#dataLeft = knownPromiseThen(
           result,
           (val) => {
-            const newDataLeft = dataLeft - val.length;
+            const newDataLeft = dataLeft - (val?.length ?? 0);
             if (newDataLeft < 0) {
               throw new ByteutilsError("Data over-read");
             }
@@ -95,6 +95,9 @@ export class StreamSlicer<
             return knownPromiseThen(
               this.#prependSource.pull(ideal),
               (chunk) => {
+                if (chunk === null) {
+                  return null;
+                }
                 if (chunk.length > max) {
                   this.#prependSource.pushPrependQueue([chunk.subarray(max)]);
                   return chunk.subarray(0, max);

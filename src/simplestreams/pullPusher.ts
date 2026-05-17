@@ -27,6 +27,9 @@ export abstract class PullPusher<IsAsync extends boolean> implements Sourced<
         }
         if (this.source.pullable) {
           const pulled = await this.source.pull(this.ideal);
+          if (pulled === null) {
+            break
+          }
           if (pulled.length > 0) {
             await this.pushed(pulled);
           }

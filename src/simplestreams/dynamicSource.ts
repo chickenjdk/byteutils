@@ -2,17 +2,17 @@ import {
   knownPromiseThen,
   LockQueue,
   maybePromiseResolve,
-  noDataUint8Array,
   SimpleEventEmitter,
   SimpleEventListener,
   wrapForLockIfNeeded,
 } from "../common.js";
-import { CanNotWaitDueToSyncError } from "../errors.js";
+import { CanNotWaitDueToSyncError, StreamClosedError } from "../errors.js";
 import { MaybePromise } from "../types.js";
 import { BaseStream, baseStreamEvents, Sourced } from "./base.js";
 
 export interface DynamicSourceEvents extends baseStreamEvents {
   sourceChange: SimpleEventListener<void, "sourceChange">;
+  sourceAvailable: SimpleEventListener<void, "sourceAvailable">;
 }
 
 export class DynamicSource<IsAsync extends boolean>
@@ -23,7 +23,9 @@ export class DynamicSource<IsAsync extends boolean>
   readonly events: SimpleEventEmitter<DynamicSourceEvents>;
   #lock: LockQueue | undefined;
   #source: BaseStream<IsAsync> | undefined;
-  #boundRelayEvent: (arg: any, name: keyof DynamicSourceEvents) => void;
+  #temporaryCallbacks:
+    | [keyof baseStreamEvents, SimpleEventListener<any, string>][]
+    | undefined;
   get source() {
     return this.#source;
   }
@@ -40,53 +42,99 @@ export class DynamicSource<IsAsync extends boolean>
       this.#lock = new LockQueue();
     }
     this.events = new SimpleEventEmitter<DynamicSourceEvents>();
-    this.#boundRelayEvent = function (
-      this: DynamicSource<IsAsync>,
-      arg: any,
-      name: keyof DynamicSourceEvents,
-    ) {
-      this.events.emit(name, arg);
-    }.bind(this);
   }
   setSource(
     newSource: BaseStream<IsAsync> | undefined,
   ): MaybePromise<void, IsAsync> {
-    // Skip the lock queue if there is not a source left, because those in front of us in the queue are waiting for the source.
+    const setSource = () => {
+      this.#source = newSource;
+      if (newSource) {
+        const callback = () => {
+          this._setPullableState(newSource.pullable);
+        };
+        this.#temporaryCallbacks = [["pullableStateChange", callback]];
+        newSource?.events.on("pullableStateChange", callback);
+        this._setPullableState(newSource.pullable);
+      } else {
+        this._setPullableState(false);
+      }
+      this.events.emit("sourceChange", undefined);
+      if (newSource) {
+        this.events.emit("sourceAvailable", undefined);
+      }
+    };
+    // We don't use the lock here, as that would trigger deadlocks with pull if the source ends. _pull must keep its own reference to #source to keep things safe
     if (this.#source === undefined) {
       this.#source = newSource;
-      this.#source?.events.on("pullableStateChange", this.#boundRelayEvent);
-      this.events.emit("sourceChange", undefined);
+      setSource();
       return maybePromiseResolve(undefined, this.isAsync);
     } else {
-      return wrapForLockIfNeeded(this.isAsync, this.#lock, () => {
-        // @ts-ignore
-        this.#source.events.off("pullableStateChange", this.#boundRelayEvent);
-        this.#source = newSource;
-        this.#source?.events.on("pullableStateChange", this.#boundRelayEvent);
-        this.events.emit("sourceChange", undefined);
-        return maybePromiseResolve(undefined, this.isAsync);
-      });
+      if (this.#temporaryCallbacks) {
+        for (const [name, cb] of this.#temporaryCallbacks) {
+          this.#source?.events.off(name, cb);
+        }
+      }
+      setSource();
+      return maybePromiseResolve(undefined, this.isAsync);
     }
   }
-  _pull(ideal: number): MaybePromise<Uint8Array, IsAsync> {
-    return wrapForLockIfNeeded(this.isAsync, this.#lock, () => {
-      if (this.#source === undefined) {
-        if (this.isAsync) {
-          return new Promise<void>((resolve) =>
-            this.events.once("sourceChange", resolve),
-          ).then(() => this.#source!.pull(ideal));
+  _pull(
+    ideal: number,
+    __ignoreLock__ = false,
+  ): MaybePromise<Uint8Array, IsAsync> {
+    return wrapForLockIfNeeded(
+      this.isAsync && !__ignoreLock__,
+      this.#lock,
+      () => {
+        const source = this.#source;
+        if (source === undefined) {
+          if (this.isAsync) {
+            return new Promise<void>((resolve, reject) => {
+              const closeCb = () => {
+                reject(new StreamClosedError("Stream has closed"));
+              };
+              this.events.once("close", closeCb);
+              this.events.once("sourceAvailable", () => {
+                resolve();
+                this.events.off("close", closeCb);
+              });
+            }).then(() => {
+              const value = this.#source!.pull(ideal);
+              return knownPromiseThen(
+                value,
+                (result) => {
+                  if (result === null && !this.closed) {
+                    return this._pull(ideal, true);
+                  } else {
+                    return result;
+                  }
+                },
+                this.isAsync,
+              );
+            });
+          } else {
+            throw new CanNotWaitDueToSyncError(
+              "No source is present, but tried to pull",
+            );
+          }
         } else {
-          throw new CanNotWaitDueToSyncError(
-            "No source is present, but tried to pull",
+          const value = source.pull(ideal);
+          return knownPromiseThen(
+            value,
+            (result) => {
+              if (result === null && !this.closed) {
+                return this._pull(ideal, true);
+              } else {
+                return result;
+              }
+            },
+            this.isAsync,
           );
         }
-      } else {
-        return this.#source.pull(ideal);
-      }
-    }) as MaybePromise<Uint8Array<ArrayBufferLike>, IsAsync>;
+      },
+    ) as MaybePromise<Uint8Array<ArrayBufferLike>, IsAsync>;
   }
   close() {
     super.close();
-    this.#source?.close();
   }
 }

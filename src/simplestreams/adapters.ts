@@ -3,7 +3,6 @@ import { PushableStreamBase } from "./pushable.js";
 import { BaseStream, baseStreamEvents } from "./base.js";
 import {
   knownPromiseThen,
-  maybePromiseResolve,
   noDataUint8Array,
   SimpleEventEmitter,
 } from "../common.js";

@@ -1,5 +1,8 @@
-import { SimpleEventEmitter, SimpleEventListener } from "../common.js";
-import { StreamClosedError } from "../errors.js";
+import {
+  maybePromiseResolve,
+  SimpleEventEmitter,
+  SimpleEventListener,
+} from "../common.js";
 import { MaybePromise } from "../types.js";
 
 export interface baseStreamEvents {
@@ -59,12 +62,13 @@ export abstract class BaseStream<IsAsync extends boolean> {
   ): ReturnType<BaseStream<IsAsync>["pull"]>;
   /**
    * Grab some data from the stream.
+   * Should return null if the stream is closed
    * @param ideal The ideal amount of data. Implementers should ignore this if there data is chunked, and instead give the whole chunk. If they do not yet have a full chunk, give what you have.
    * @returns Uint8Array containing the data, but if the stream is sync and no data is present, it should throw a CanNotWaitDueToSyncError
    */
-  pull(ideal: number): MaybePromise<Uint8Array, IsAsync> {
+  pull(ideal: number): MaybePromise<Uint8Array | null, IsAsync> {
     if (this.#closed && this._doPullCheck) {
-      throw new StreamClosedError("Stream is closed but tried to pull from it");
+      return maybePromiseResolve(null, this.isAsync);
     }
     // @ts-ignore
     return this._pull(...arguments);

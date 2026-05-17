@@ -112,6 +112,9 @@ export class TeeStream<IsAsync extends boolean> implements Sourced<
             return knownPromiseThen(
               self.source.pull(ideal),
               (data) => {
+                if (data === null) {
+                  return;
+                }
                 for (const queue of self.#getQueues()) {
                   queue.queue.push(data);
                 }
@@ -125,6 +128,9 @@ export class TeeStream<IsAsync extends boolean> implements Sourced<
       }
     })();
     const stream = new TeeStreamOutput(this.isAsync, this, controller);
+    this.source.events.once("close", () => {
+      stream.close();
+    });
     this.#queues.add(new WeakRef(controller));
     return stream;
   }
