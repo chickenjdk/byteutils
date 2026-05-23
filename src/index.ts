@@ -8,5 +8,4 @@ export * as resizableBuffer from "./resizableBuffer.js";
 export * as dynamicTypedArrays from "./dynamicTypedArrays.js";
 export { addDefaultEndianness } from "./common.js";
 export * as common from "./common.js";
-export * as simplestreams from "./simplestreams/index.js";
 export * as types from "./types.js";

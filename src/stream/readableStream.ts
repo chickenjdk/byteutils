@@ -52,10 +52,6 @@ export class readableStream<
   onceDrain(listener: () => void) {
     this.events.once("drain", () => listener());
   }
-  /**
-   * @deprecated
-   * Use simplestreams adapters instead
-   */
   constructor(stream: T) {
     super();
     this.events = new SimpleEventEmitter<readableStreamEventMap>();
