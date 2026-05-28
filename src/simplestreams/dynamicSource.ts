@@ -89,16 +89,19 @@ export class DynamicSource<IsAsync extends boolean>
         const source = this.#source;
         if (source === undefined) {
           if (this.isAsync) {
-            return new Promise<void>((resolve, reject) => {
+            return new Promise<void | null>((resolve) => {
               const closeCb = () => {
-                reject(new StreamClosedError("Stream has closed"));
+                resolve(null);
               };
               this.events.once("close", closeCb);
               this.events.once("sourceAvailable", () => {
                 resolve();
                 this.events.off("close", closeCb);
               });
-            }).then(() => {
+            }).then((val) => {
+              if (val === null) {
+                return null;
+              }
               const value = this.#source!.pull(ideal);
               return knownPromiseThen(
                 value,
@@ -123,6 +126,7 @@ export class DynamicSource<IsAsync extends boolean>
             value,
             (result) => {
               if (result === null && !this.closed) {
+                this.#source = undefined;
                 return this._pull(ideal, true);
               } else {
                 return result;
