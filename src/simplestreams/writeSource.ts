@@ -1,35 +1,39 @@
-import FastFIFO from "fast-fifo";
 import { writableBufferBase } from "../writableBuffer.js";
 import { BaseStream, baseStreamEvents } from "./base.js";
-import {
-  LockQueue,
-  SimpleEventEmitter,
-} from "../common.js";
+import { LockQueue, SimpleEventEmitter } from "../common.js";
+
+// TODO: clean up
 
 export class WriterSourceInput extends writableBufferBase<true> {
   readonly #dataLock: LockQueue;
-  #dataCb: [() => void, (error: Error) => void] = [() => void 0, () => void 0];
-  #data: FastFIFO<Uint8Array>;
-
+  readonly #dataOutputLock: LockQueue;
+  #dataCb: [(data: Uint8Array) => void, (error: Error) => void] | undefined;
+  #getDataCb: [() => void, (error: Error) => void] | undefined;
   async getData() {
     await this.#dataLock.acquire();
-    if (this.#data.isEmpty()) {
-      await new Promise<void>(
-        (resolve, reject) => (this.#dataCb = [resolve, reject]),
-      );
+    try {
+      const data = new Promise<Uint8Array>((resolve, reject) => {
+        this.#dataCb = [resolve, reject];
+      });
+      if (this.#getDataCb) {
+        this.#getDataCb[0]();
+      }
+      await data;
+      return data;
+    } finally {
+      this.#dataLock.release();
+      this.#dataCb = undefined;
     }
-    const data = this.#data.shift()!;
-    this.#dataLock.release();
-    return data;
   }
   close(error: Error) {
     this.#dataLock.close(error, error);
-    this.#dataCb[1](error);
+    this.#dataCb && this.#dataCb[1](error);
+    this.#getDataCb && this.#getDataCb[1](error);
   }
   constructor() {
     super();
     this.#dataLock = new LockQueue();
-    this.#data = new FastFIFO();
+    this.#dataOutputLock = new LockQueue();
   }
   writeArray(value: number[]): Promise<void> {
     return this.writeUint8Array(new Uint8Array(value));
@@ -38,8 +42,17 @@ export class WriterSourceInput extends writableBufferBase<true> {
     return this.writeUint8Array(new Uint8Array(value).reverse());
   }
   async writeUint8Array(value: Uint8Array): Promise<void> {
-    this.#data.push(value);
-    this.#dataCb[0]();
+    await this.#dataOutputLock.acquire();
+    if (this.#dataCb) {
+      this.#dataCb[0](value);
+    } else {
+      await new Promise<void>((resolve, reject) => {
+        this.#getDataCb = [resolve, reject];
+      });
+      this.#getDataCb = undefined;
+      this.#dataCb![0](value);
+    }
+    this.#dataOutputLock.release();
   }
   writeUint8ArrayBackwards(value: Uint8Array): Promise<void> {
     return this.writeUint8Array(value.slice().reverse());
