@@ -24,11 +24,6 @@ export abstract class BaseStream<IsAsync extends boolean> {
   }
   abstract isAsync: IsAsync;
   /**
-   * If the pull check of "is the stream closed" should be performed. Can be changed.
-   * @private
-   */
-  _doPullCheck: boolean = true;
-  /**
    * If the stream can currently be pulled. Edit with setPullableState
    */
   #pullable: boolean = true;
@@ -67,7 +62,7 @@ export abstract class BaseStream<IsAsync extends boolean> {
    * @returns Uint8Array containing the data, but if the stream is sync and no data is present, it should throw a CanNotWaitDueToSyncError
    */
   pull(ideal: number): MaybePromise<Uint8Array | null, IsAsync> {
-    if (this.#closed && this._doPullCheck) {
+    if (this.#closed) {
       return maybePromiseResolve(null, this.isAsync);
     }
     // @ts-ignore

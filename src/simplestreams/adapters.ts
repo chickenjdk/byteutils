@@ -1,5 +1,5 @@
 import { Readable } from "stream";
-import { PushableStreamBase } from "./pushable.js";
+import { PushableStreamBase, PushableStreamEvents } from "./pushable.js";
 import { BaseStream, baseStreamEvents } from "./base.js";
 import {
   knownPromiseThen,
@@ -11,7 +11,7 @@ import { MaybePromise } from "../types.js";
 export class NodejsStreamIAdapter extends PushableStreamBase<true, Readable> {
   readonly isAsync: true = true;
   readonly source: Readable;
-  readonly events: SimpleEventEmitter<baseStreamEvents>;
+  readonly events: SimpleEventEmitter<PushableStreamEvents>;
   highWaterMark: number;
   lowWaterMark: number;
 
@@ -35,7 +35,7 @@ export class NodejsStreamIAdapter extends PushableStreamBase<true, Readable> {
       }
     });
     this.source.once("close", () => {
-      this.close();
+      this.eof();
     });
   }
   _pull(ideal: number): Promise<Uint8Array<ArrayBufferLike>> {

@@ -4,6 +4,7 @@ import {
   maybePromiseResolve,
   noDataUint8Array,
   SimpleEventEmitter,
+  SimpleEventListener,
   wrapForLockIfNeeded,
 } from "../common.js";
 import { StreamClosedError } from "../errors.js";
@@ -11,6 +12,10 @@ import { MaybePromise } from "../types.js";
 import { writableBufferBase } from "../writableBuffer.js";
 import { BaseStream, baseStreamEvents, Sourced } from "./base.js";
 import FIFO from "fast-fifo";
+
+export interface PushableStreamEvents extends baseStreamEvents {
+  eof: SimpleEventListener<void, "eof">;
+}
 
 // Can not make switchable because the source is not a stream
 export abstract class PushableStreamBase<IsAsync extends boolean, Source>
@@ -51,9 +56,8 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
   }
   // @ts-ignore
   #lock: IsAsync extends true ? LockQueue : undefined;
-  // We do not want a pull check because the expected behavior by users is likely that a push stream will continue giving data even if it is closed until it is empty.
-  _doPullCheck = false;
   abstract readonly source: Source;
+  abstract readonly events: SimpleEventEmitter<PushableStreamEvents>;
   /**
    * A stream that you can push to!
    * Uses a ChunkTransformerEmitter instance as a FIFO to allow pushing data and later pulling it.
@@ -76,6 +80,11 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
     }
   }
   isAsync: IsAsync;
+  isEof: boolean = false;
+  eof() {
+    this.isEof = true;
+    this.events.emit("eof", undefined);
+  }
   /**
    * Handle the starvation of data.
    * Called whenever we are out of data.
@@ -85,8 +94,8 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
    */
   _handleDataStarvation(): boolean {
     this._setPullableState(false);
-    if (this.closed) {
-      this._doPullCheck = true;
+    if (this.isEof) {
+      this.close();
       return true;
     }
     return false;
@@ -113,21 +122,22 @@ export abstract class PushableStreamBase<IsAsync extends boolean, Source>
         }
         if (this.isAsync) {
           return (async () => {
-            const shouldNull = await new Promise<boolean>((resolve) => {
+            const hasEnded = await new Promise<boolean>((resolve) => {
               const closeCb = () => {
                 resolve(true);
               };
-              this.events.once("close", closeCb);
+              this.events.once("eof", closeCb);
               const lengthCb = (amount: number) => {
                 if (this.#buffers.length > 0 || amount > 0) {
-                  this.events.off("close", closeCb);
+                  this.events.off("eof", closeCb);
                   this.#chunkSplitter.emitter.off("lengthChange", lengthCb);
                   resolve(false);
                 }
               };
               this.#chunkSplitter.emitter.on("lengthChange", lengthCb);
             });
-            if (shouldNull) {
+            if (hasEnded) {
+              this.close();
               return null;
             }
             if (this.#buffers.length > 0) {
@@ -180,7 +190,7 @@ export class PushableStream<IsAsync extends boolean> extends PushableStreamBase<
   PushableStreamSource<IsAsync>
 > {
   readonly source: PushableStreamSource<IsAsync>;
-  readonly events: SimpleEventEmitter<baseStreamEvents>;
+  readonly events: SimpleEventEmitter<PushableStreamEvents>;
 
   constructor(isAsync: IsAsync, chunkSize: number = 2000) {
     super(isAsync, chunkSize);

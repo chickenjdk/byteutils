@@ -6,7 +6,7 @@ import {
   SimpleEventListener,
   wrapForLockIfNeeded,
 } from "../common.js";
-import { CanNotWaitDueToSyncError, StreamClosedError } from "../errors.js";
+import { CanNotWaitDueToSyncError } from "../errors.js";
 import { MaybePromise } from "../types.js";
 import { BaseStream, baseStreamEvents, Sourced } from "./base.js";
 
@@ -87,7 +87,7 @@ export class DynamicSource<IsAsync extends boolean>
       this.#lock,
       () => {
         const source = this.#source;
-        if (source === undefined) {
+        if (source === undefined || source.closed) {
           if (this.isAsync) {
             return new Promise<void | null>((resolve) => {
               const closeCb = () => {
@@ -126,7 +126,6 @@ export class DynamicSource<IsAsync extends boolean>
             value,
             (result) => {
               if (result === null && !this.closed) {
-                this.#source = undefined;
                 return this._pull(ideal, true);
               } else {
                 return result;
