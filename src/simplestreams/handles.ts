@@ -1,5 +1,10 @@
 import { ChunkReader } from "../chunkReader.js";
-import { knownPromiseThen, SimpleEventEmitter } from "../common.js";
+import {
+  knownPromiseThen,
+  noDataUint8Array,
+  SimpleEventEmitter,
+} from "../common.js";
+import { CanNotWaitDueToSyncError } from "../errors.js";
 import { MaybePromise } from "../types.js";
 import { BaseStream } from "./base.js";
 import {
@@ -25,7 +30,26 @@ export class StreamHandle<IsAsync extends boolean>
     return knownPromiseThen(
       this.getSource(),
       (source) => {
-        return source.pull(idealLength);
+        const result = source.pull(idealLength);
+        if (result === null) {
+          if (this.isAsync) {
+            return (async () => {
+              await new Promise((resolve) => {
+                // sourceAvailable means the source switched to a new one that is not undefined
+                this.events.once("sourceAvailable", resolve);
+              });
+              return this.getChunk(idealLength);
+            })() as unknown as MaybePromise<
+              Uint8Array<ArrayBufferLike>,
+              IsAsync
+            >;
+          } else {
+            throw new CanNotWaitDueToSyncError(
+              "End of stream, but can not wait for the stream's source to switch",
+            );
+          }
+        }
+        return result as Uint8Array;
       },
       this.isAsync,
     ) as MaybePromise<Uint8Array<ArrayBufferLike>, IsAsync>;
