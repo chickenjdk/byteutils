@@ -34,7 +34,14 @@ export class NodejsStreamIAdapter extends PushableStreamBase<true, Readable> {
         this.source.pause();
       }
     });
-    this.source.once("close", () => {
+    this.source.once("end", () => {
+      while (true) {
+        const item = this.source.read();
+        if (item === null) {
+          break;
+        }
+        this._writeUint8Array(item);
+      }
       this.eof();
     });
   }
